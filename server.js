@@ -16,6 +16,11 @@ app.get("/health", (req, res) => {
   res.json({ ok: true, service: "republique", time: new Date().toISOString() });
 });
 
+// Yeni QR kod yapısı (örneğin: /menu/b-4)
+app.get("/menu/:table", (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 app.get("/api/menu", (req, res) => {
   const menu = getCachedMenu();
   if (menu) {
