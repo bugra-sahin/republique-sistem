@@ -90,6 +90,35 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function getActivePrice(product) {
+    if (!product.happyHourInfo || product.happyHourInfo.length === 0) return { price: product.price, isDiscount: false };
+    
+    const now = new Date();
+    let jsDay = now.getDay(); // 0=Sun, 6=Sat
+    let isoDay = jsDay === 0 ? 7 : jsDay; // 1=Mon, 7=Sun
+    let pazarDay = jsDay + 1; // 1=Sun, 7=Sat
+
+    const currentMs = (now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()) * 1000;
+
+    for (let hh of product.happyHourInfo) {
+      if (!hh.active) continue;
+      
+      if (hh.days.includes(jsDay) || hh.days.includes(isoDay) || hh.days.includes(pazarDay)) {
+        if (hh.startHour <= hh.endHour) {
+          if (currentMs >= hh.startHour && currentMs <= hh.endHour) {
+            return { price: hh.price, isDiscount: true, originalPrice: product.price };
+          }
+        } else {
+          // Gece yarısını geçen durum (Örn: 22:00 - 03:00)
+          if (currentMs >= hh.startHour || currentMs <= hh.endHour) {
+            return { price: hh.price, isDiscount: true, originalPrice: product.price };
+          }
+        }
+      }
+    }
+    return { price: product.price, isDiscount: false };
+  }
+
   function renderMenu() {
     categoryNav.innerHTML = '';
     menuContainer.innerHTML = '';
@@ -147,12 +176,20 @@ document.addEventListener('DOMContentLoaded', () => {
               const defaultImg = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="90" height="90" fill="%230a1f16"><rect width="90" height="90" fill="%2305100c"/><text x="45" y="45" fill="%23d4af37" font-size="12" font-family="sans-serif" text-anchor="middle" alignment-baseline="middle">REPUBLIQUE</text></svg>';
               const imgSrc = product.image ? product.image : defaultImg;
 
+              const priceInfo = getActivePrice(product);
+              let priceHtml = '';
+              if (priceInfo.isDiscount) {
+                priceHtml = `<span style="text-decoration: line-through; opacity: 0.6; font-size: 0.9em; margin-right: 5px;">${priceInfo.originalPrice} ₺</span><span style="color: #d4af37; font-weight: bold; font-size: 1.1em;">${priceInfo.price} ₺</span>`;
+              } else {
+                priceHtml = `${priceInfo.price} ₺`;
+              }
+
               pCard.innerHTML = `
                 <img src="${imgSrc}" class="product-img" alt="${product.name}" loading="lazy" onerror="this.src='${defaultImg}'">
                 <div class="product-info">
                   <div class="product-name">${product.name}</div>
                   <div class="product-desc">${product.description || ''}</div>
-                  <div class="product-price">${product.price} ₺</div>
+                  <div class="product-price">${priceHtml}</div>
                 </div>
               `;
               catSection.appendChild(pCard);
