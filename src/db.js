@@ -24,9 +24,36 @@ async function initDb() {
         user_agent TEXT,
         ip VARCHAR(45)
       );
+
+      CREATE TABLE IF NOT EXISTS ad_rules (
+        id SERIAL PRIMARY KEY,
+        max_cpa NUMERIC(10, 2) DEFAULT 200.00,
+        min_roas NUMERIC(10, 2) DEFAULT 2.00,
+        pause_if_no_purchase_after_days INTEGER DEFAULT 3,
+        ask_approval_for_average BOOLEAN DEFAULT true
+      );
+
+      CREATE TABLE IF NOT EXISTS ad_actions_log (
+        id SERIAL PRIMARY KEY,
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        action_type VARCHAR(100),
+        ad_id VARCHAR(255),
+        ad_name VARCHAR(255),
+        status VARCHAR(50), -- PENDING, APPROVED, REJECTED, EXECUTED
+        details JSONB
+      );
+
+      CREATE TABLE IF NOT EXISTS audience_syncs (
+        id SERIAL PRIMARY KEY,
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        audience_type VARCHAR(100),
+        count INTEGER,
+        status VARCHAR(50),
+        details JSONB
+      );
     `;
     await pool.query(query);
-    console.log('Postgres "scans" tablosu hazır.');
+    console.log('Postgres "scans" ve "ads_management" tabloları hazır.');
   } catch (err) {
     console.error('Postgres tablo oluşturma hatası:', err);
   }
