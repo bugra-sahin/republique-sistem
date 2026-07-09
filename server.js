@@ -87,6 +87,46 @@ app.post("/api/admin/upload-pos", upload.single('pos_file'), async (req, res) =>
   }
 });
 
+// 3. Meta Reklam AI Dashboard
+const { getAccountInsights, ACCOUNTS, analyzeOldAccount } = require("./src/meta-marketing");
+
+app.get("/api/admin/ads/dashboard", async (req, res) => {
+  try {
+    const newAccountData = await getAccountInsights(ACCOUNTS['Reklam 2 TL'], 'last_30d');
+    const oldAccountData = await analyzeOldAccount(); // Sadece okuma
+
+    const { rows: rules } = await db.query('SELECT * FROM ad_rules ORDER BY id DESC LIMIT 1');
+    const { rows: actions } = await db.query('SELECT * FROM ad_actions_log ORDER BY timestamp DESC LIMIT 20');
+
+    res.json({
+      success: true,
+      data: {
+        active_account: newAccountData,
+        old_account_learning: oldAccountData,
+        rules: rules[0] || {},
+        recent_actions: actions
+      }
+    });
+  } catch (err) {
+    console.error('Ads Dashboard Error:', err);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+app.post("/api/admin/ads/settings", async (req, res) => {
+  try {
+    const { max_cpa, min_roas, pause_if_no_purchase_after_days } = req.body;
+    await db.query(
+      `INSERT INTO ad_rules (max_cpa, min_roas, pause_if_no_purchase_after_days) VALUES ($1, $2, $3)`,
+      [max_cpa, min_roas, pause_if_no_purchase_after_days]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Ads Settings Error:', err);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
 app.listen(PORT, "0.0.0.0", async () => {
   console.log("Republique app listening on " + PORT);
   
