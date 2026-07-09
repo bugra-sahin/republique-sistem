@@ -17,6 +17,7 @@
       <button class="tab-btn active" data-tab="tab-live">Canlı Akış</button>
       <button class="tab-btn" data-tab="tab-upload">Adisyon Yükle</button>
       <button class="tab-btn" data-tab="tab-reports">Günün Özeti</button>
+      <button class="tab-btn" data-tab="tab-ads" style="color: var(--accent-purple); font-weight: bold;">Reklam Yönetimi (AI)</button>
     </div>
   </nav>
 
@@ -119,6 +120,91 @@
       </div>
 
     </div>
+
+    <!-- Sekme 4: Reklam Yönetimi (AI) -->
+    <div id="tab-ads" class="tab-content">
+      <div class="dashboard-grid">
+        <div class="stat-card highlight">
+          <span class="stat-title">Toplam Reklam Harcaması</span>
+          <span class="stat-value blue" id="adTotalSpend">Yükleniyor...</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-title">Ortalama CPA (Edinme Başına Maliyet)</span>
+          <span class="stat-value green" id="adAverageCpa">Yükleniyor...</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-title">Kümülatif ROAS</span>
+          <span class="stat-value yellow" id="adRoas">Yükleniyor...</span>
+        </div>
+        <div class="stat-card" style="cursor: pointer;" onclick="toggleAdSettings()">
+          <span class="stat-title">AI Kuralları (Ayarlar)</span>
+          <span class="stat-value" style="color: var(--accent-purple); font-size: 1.5rem;"><span class="material-icons-round" style="vertical-align: middle;">settings</span> Yapılandır</span>
+        </div>
+      </div>
+
+      <!-- Ayarlar Pop-up (Gizli) -->
+      <div id="adSettingsModal" class="glass-card" style="display: none; margin-bottom: 2rem; border: 1px solid var(--accent-purple);">
+        <h3 style="color: var(--accent-purple); margin-top: 0;">AI Otomasyon Kuralları</h3>
+        <p style="color: var(--text-secondary); margin-bottom: 1rem;">Bu kurallar çerçevesinde AI reklamları duraklatır veya sana onay sorar.</p>
+        <div style="display: flex; gap: 1rem; align-items: center;">
+          <div>
+            <label>Maksimum CPA (TL)</label>
+            <input type="number" id="inputMaxCpa" value="200" style="padding: 0.5rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; border-radius: 4px;">
+          </div>
+          <div>
+            <label>Minimum ROAS</label>
+            <input type="number" id="inputMinRoas" value="2.0" step="0.1" style="padding: 0.5rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; border-radius: 4px;">
+          </div>
+          <button class="btn-primary" onclick="saveAdSettings()" style="margin-top: 1.2rem;">Kaydet</button>
+        </div>
+      </div>
+
+      <div class="glass-card">
+        <h2>Aktif Kampanyalar ve Performans (Reklam 2 TL)</h2>
+        <div class="table-wrapper">
+          <table id="adsCampaignTable">
+            <thead>
+              <tr>
+                <th>Kampanya Adı</th>
+                <th>Durum</th>
+                <th>Harcama</th>
+                <th>Satın Alma (CAPI)</th>
+                <th>CPA (Maliyet)</th>
+                <th>ROAS</th>
+                <th>AI Önerisi</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="7" style="text-align:center; color: var(--text-secondary);">Reklam verileri çekiliyor...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="glass-card" style="margin-top: 2rem;">
+        <h2>Eski Hesap Öğrenme Verisi (Reklam 1 TL - Read Only)</h2>
+        <p style="color: var(--text-secondary); font-size: 0.9rem;">Geçmişte en iyi çalışan kreatfileri tespit etmek için salt okunur olarak çekilen veriler.</p>
+        <div class="table-wrapper">
+          <table id="oldAdsTable">
+            <thead>
+              <tr>
+                <th>Kampanya Adı</th>
+                <th>Toplam Harcama</th>
+                <th>Eski CPA</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="3" style="text-align:center; color: var(--text-secondary);">Yükleniyor...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
   </main>
 
   <script src="/admin/js/admin.js"></script>
