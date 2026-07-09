@@ -1,11 +1,15 @@
 const express = require("express");
 const path = require("path");
+const cookieParser = require("cookie-parser");
 const { updateMenu, getCachedMenu } = require("./src/menu-fetcher");
 const { startFirestoreListener } = require("./src/firestore-listener");
+const db = require("./src/db");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+app.use(express.json());
+app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get("/health", (req, res) => {
@@ -21,23 +25,28 @@ app.get("/api/menu", (req, res) => {
   }
 });
 
-app.get("/", (req, res) => {
-  res.set("Content-Type", "text/html; charset=utf-8");
-  res.send(`<!doctype html><html lang="tr"><head><meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Republique</title>
-  <style>body{font-family:system-ui,sans-serif;text-align:center;margin-top:60px;color:#222}</style>
-  </head><body>
-  <h1>Republique sistemi calisiyor</h1>
-  <p>Faz 1 - altyapi ayakta. Menu ve tarama modulleri buraya gelecek.</p>
-  <p><a href="/api/menu">Canli menuyu goruntule</a></p>
-  <p style="color:#888">v0.1.0</p>
-  </body></html>`);
+app.post("/api/track", async (req, res) => {
+  try {
+    const { rep_id, fbp, fbc, masa, utm_source, utm_medium, utm_campaign, utm_content, utm_term, fbclid } = req.body;
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    const userAgent = req.headers['user-agent'];
+
+    await db.query(
+      `INSERT INTO scans (rep_id, fbp, fbc, masa, utm_source, utm_medium, utm_campaign, utm_content, utm_term, fbclid, user_agent, ip) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+      [rep_id, fbp, fbc, masa, utm_source, utm_medium, utm_campaign, utm_content, utm_term, fbclid, userAgent, ip]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Track error:', err);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
 });
 
 app.listen(PORT, "0.0.0.0", async () => {
   console.log("Republique app listening on " + PORT);
   
+  await db.initDb();
   await updateMenu();
   
   startFirestoreListener(() => {

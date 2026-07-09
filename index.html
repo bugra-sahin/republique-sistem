@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Republique Menu</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Playfair+Display:ital,wght@0,600;1,600&display=swap" rel="stylesheet">
+  <!-- Material Icons -->
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+  
+  <!-- Meta Pixel Code -->
+  <script>
+  !function(f,b,e,v,n,t,s)
+  {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+  n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+  if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+  n.queue=[];t=b.createElement(e);t.async=!0;
+  t.src=v;s=b.getElementsByTagName(e)[0];
+  s.parentNode.insertBefore(t,s)}(window, document,'script',
+  'https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', '858472356496034');
+  // Burada PageView atmıyoruz, çünkü uygulama içerisinde dinamik olarak ViewMenu olayı atacağız.
+  // fbq('track', 'PageView');
+  </script>
+  <!-- End Meta Pixel Code -->
+</head>
+<body>
+  <!-- Sicak Kehribar/Bakir ve Yesil parlamalar (Ortam Aydinlatmasi) -->
+  <div class="ambient-glow glow-1"></div>
+  <div class="ambient-glow glow-2"></div>
+  <div class="ambient-glow glow-3"></div>
+
+  <!-- Header -->
+  <header class="top-header">
+    <div class="brand">
+      <div class="logo">REPUBLIQUE</div>
+      <div class="subtitle">Social House</div>
+    </div>
+    <button class="ai-btn">
+      <span class="material-icons-round">auto_awesome</span>
+      <span>Republique AI</span>
+    </button>
+  </header>
+
+  <!-- Sabit (Sticky) Menu Bolumleri (Seviye 1) -->
+  <nav class="category-nav" id="categoryNav">
+    <!-- JS tarafindan doldurulacak -->
+  </nav>
+
+  <!-- Ana Icerik -->
+  <main class="menu-container" id="menuContainer">
+    <div class="loading-state">Menü hazırlanıyor...</div>
+    <!-- JS tarafindan doldurulacak -->
+  </main>
+
+  <!-- KVKK Alt Bilgi -->
+  <footer class="kvkk-footer">
+    <p>Sitemizi kullanarak <a href="#">KVKK ve Çerez Politikamızı</a> kabul etmiş sayılırsınız.</p>
+  </footer>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>
