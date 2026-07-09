@@ -21,6 +21,8 @@ document.addEventListener('DOMContentLoaded', () => {
       // Eğer "Canlı Akış" sekmesine tıklandıysa güncel veriyi çek
       if (targetId === 'tab-live') {
         fetchLiveScans();
+      } else if (targetId === 'tab-ads') {
+        fetchAdsDashboard();
       }
     });
   });
@@ -169,6 +171,134 @@ document.addEventListener('DOMContentLoaded', () => {
     if (reportData.matches.some(m => m.type !== 'ORGANİK' && !m.capiSent)) {
       document.getElementById('btnSendToMeta').style.display = 'block';
     }
+  }
+
+  // --- Reklam Yönetimi (AI) Fonksiyonları ---
+
+  window.toggleAdSettings = function() {
+    const modal = document.getElementById('adSettingsModal');
+    modal.style.display = modal.style.display === 'none' ? 'block' : 'none';
+  };
+
+  window.saveAdSettings = function() {
+    const maxCpa = document.getElementById('inputMaxCpa').value;
+    const minRoas = document.getElementById('inputMinRoas').value;
+
+    fetch('/api/admin/ads/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        max_cpa: parseFloat(maxCpa),
+        min_roas: parseFloat(minRoas),
+        pause_if_no_purchase_after_days: 3
+      })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        alert("AI Kuralları başarıyla kaydedildi.");
+        toggleAdSettings();
+      } else {
+        alert("Kaydetme hatası.");
+      }
+    });
+  };
+
+  function fetchAdsDashboard() {
+    fetch('/api/admin/ads/dashboard')
+      .then(res => res.json())
+      .then(result => {
+        if (!result.success) return;
+        const data = result.data;
+
+        // Kuralları UI'a yaz
+        if (data.rules) {
+          document.getElementById('inputMaxCpa').value = data.rules.max_cpa || 200;
+          document.getElementById('inputMinRoas').value = data.rules.min_roas || 2.0;
+        }
+
+        // Yeni Hesap Tablosunu ve Özetleri Doldur
+        const activeCamps = data.active_account || [];
+        const tbodyActive = document.querySelector('#adsCampaignTable tbody');
+        tbodyActive.innerHTML = '';
+
+        let totalSpend = 0;
+        let totalPurchases = 0;
+        let totalRevenue = 0;
+
+        if (activeCamps.length === 0) {
+          tbodyActive.innerHTML = `<tr><td colspan="7" style="text-align:center;">Kayıt bulunamadı.</td></tr>`;
+        } else {
+          activeCamps.forEach(camp => {
+            const insights = camp.insights && camp.insights.data && camp.insights.data[0] ? camp.insights.data[0] : null;
+            const spend = insights ? parseFloat(insights.spend) : 0;
+            const purchases = insights && insights.actions ? insights.actions.find(a => a.action_type === 'purchase')?.value || 0 : 0;
+            const revenue = insights && insights.action_values ? insights.action_values.find(a => a.action_type === 'purchase')?.value || 0 : 0;
+            const cpa = purchases > 0 ? (spend / purchases).toFixed(2) : '-';
+            const roas = spend > 0 ? (revenue / spend).toFixed(2) : '-';
+
+            totalSpend += spend;
+            totalPurchases += parseInt(purchases);
+            totalRevenue += parseFloat(revenue);
+
+            let aiSuggestion = '<span style="color:var(--text-secondary)">Bekleniyor</span>';
+            const maxCpaAllowed = data.rules.max_cpa || 200;
+
+            if (purchases > 0 && parseFloat(cpa) > maxCpaAllowed) {
+              aiSuggestion = '<span class="badge" style="background:#ef4444; color:white;">DURDURMALI</span>';
+            } else if (spend > 0 && purchases === 0) {
+              aiSuggestion = '<span class="badge yellow">GÖZLEMDE</span>';
+            }
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td>${camp.name}</td>
+              <td>${camp.status}</td>
+              <td>${spend.toFixed(2)} TL</td>
+              <td>${purchases}</td>
+              <td>${cpa === '-' ? '-' : cpa + ' TL'}</td>
+              <td>${roas}</td>
+              <td>${aiSuggestion}</td>
+            `;
+            tbodyActive.appendChild(tr);
+          });
+        }
+
+        document.getElementById('adTotalSpend').innerText = totalSpend.toFixed(2) + ' TL';
+        const avgCpa = totalPurchases > 0 ? (totalSpend / totalPurchases).toFixed(2) : '0.00';
+        document.getElementById('adAverageCpa').innerText = avgCpa + ' TL';
+        const totalRoas = totalSpend > 0 ? (totalRevenue / totalSpend).toFixed(2) : '0.00';
+        document.getElementById('adRoas').innerText = totalRoas;
+
+        // Eski Hesap Tablosunu Doldur
+        const oldCamps = data.old_account_learning || [];
+        const tbodyOld = document.querySelector('#oldAdsTable tbody');
+        tbodyOld.innerHTML = '';
+
+        if (oldCamps.length === 0) {
+          tbodyOld.innerHTML = `<tr><td colspan="3" style="text-align:center;">Geçmiş veri bulunamadı.</td></tr>`;
+        } else {
+          oldCamps.forEach(camp => {
+            const insights = camp.insights && camp.insights.data && camp.insights.data[0] ? camp.insights.data[0] : null;
+            const spend = insights ? parseFloat(insights.spend).toFixed(2) : '0.00';
+            const purchases = insights && insights.actions ? insights.actions.find(a => a.action_type === 'purchase')?.value || 0 : 0;
+            const cpa = purchases > 0 ? (parseFloat(spend) / parseInt(purchases)).toFixed(2) : '-';
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td>${camp.name}</td>
+              <td>${spend} TL</td>
+              <td>${cpa === '-' ? '-' : cpa + ' TL'}</td>
+            `;
+            tbodyOld.appendChild(tr);
+          });
+        }
+      })
+      .catch(err => {
+        console.error("Ads dashboard error:", err);
+        const tbody = document.querySelector('#adsCampaignTable tbody');
+        if(tbody) tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:#ef4444;">Veri çekilemedi. Meta Jetonu eksik olabilir.</td></tr>`;
+      });
   }
 
 });
