@@ -81,25 +81,20 @@ async function processPosUpload(buffer) {
 
     if (uniqueUsersAtTable.length === 0) continue; // Masada QR okutan yok (Sistem dışı organik)
 
-    // Masada herhangi bir reklam kaynağı var mı? (Arkadaş etkisi için)
-    let anyAdAtTable = false;
-    for (const u of uniqueUsersAtTable) {
-      if (u.isAdThisScan || userHistory[u.rep_id].hasSeenAd) {
-        anyAdAtTable = true;
-        break;
-      }
-    }
-
     // Her bir kişi için etiketleme yap
     for (const u of uniqueUsersAtTable) {
       let label = "ORGANİK";
       let type = "ORGANİK";
-      
+
       const history = userHistory[u.rep_id];
+
+      // Masada BAŞKA (kendisi hariç) reklam kaynaklı biri var mı? (arkadaş etkisi için)
+      const otherAdAtTable = uniqueUsersAtTable.some(o =>
+        o.rep_id !== u.rep_id && (o.isAdThisScan || userHistory[o.rep_id].hasSeenAd)
+      );
 
       if (u.isAdThisScan) {
         // Bu taramada reklamla gelmiş. Peki geçmişte nasıldı?
-        // Eğer history'deki ilk reklam gösterimi bugünden ESKİYSE veya ilk gelişleri zaten organikse:
         const firstScan = history.scans[0];
         if (!firstScan.isAd && firstScan.timestamp < (u.timestamp - 86400000)) {
           // İlk gelişi organikmiş (en az 1 gün önce), şimdi reklamla geldi
@@ -114,17 +109,17 @@ async function processPosUpload(buffer) {
           results.newCustomerRevenue += perCapita;
           results.totalAdRevenue += perCapita;
         }
-      } else if (anyAdAtTable) {
-        // Kendisi organik ama masada reklam gören biri var
-        label = "Reklam Gören Arkadaşı İle Gelen";
-        type = "HALO_EFFECT";
-        results.haloRevenue += perCapita;
-        results.totalAdRevenue += perCapita;
       } else if (history.hasSeenAd) {
-        // Bu okutmada organik ama GECMISTE reklam görmüş!
+        // Bu okutmada organik ama kişinin KENDİSİ geçmişte reklam görmüş -> geri dönüş
         label = "Geçmişte Reklam Gören (Geri Dönüş)";
         type = "RETARGETING";
         results.retargetRevenue += perCapita;
+        results.totalAdRevenue += perCapita;
+      } else if (otherAdAtTable) {
+        // Kendisi hiç reklam görmemiş ama masadaki BAŞKA biri reklam kaynaklı
+        label = "Reklam Gören Arkadaşı İle Gelen";
+        type = "HALO_EFFECT";
+        results.haloRevenue += perCapita;
         results.totalAdRevenue += perCapita;
       }
 
