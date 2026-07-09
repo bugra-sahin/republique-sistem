@@ -4,6 +4,9 @@ const cookieParser = require("cookie-parser");
 const { updateMenu, getCachedMenu } = require("./src/menu-fetcher");
 const { startFirestoreListener } = require("./src/firestore-listener");
 const db = require("./src/db");
+const multer = require("multer");
+const { processPosUpload } = require("./src/matcher");
+const { processCapiBatch } = require("./src/capi-sender");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -11,6 +14,9 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Multer in-memory ayarı (Excel/CSV yüklemeleri için)
+const upload = multer({ storage: multer.memoryStorage() });
 
 app.get("/health", (req, res) => {
   res.json({ ok: true, service: "republique", time: new Date().toISOString() });
@@ -45,6 +51,39 @@ app.post("/api/track", async (req, res) => {
   } catch (err) {
     console.error('Track error:', err);
     res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// === ADMIN PANELİ API'LERİ ===
+
+// 1. Canlı Akış Çekimi
+app.get("/api/admin/reports", async (req, res) => {
+  try {
+    const { rows } = await db.query(`SELECT * FROM scans ORDER BY timestamp DESC LIMIT 100`);
+    res.json(rows);
+  } catch (err) {
+    console.error('Reports error:', err);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// 2. Adisyon Yükleme ve Eşleştirme (Faz 2)
+app.post("/api/admin/upload-pos", upload.single('pos_file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: "Dosya yüklenmedi" });
+    }
+    
+    // Yüklenen Excel'i zeka modülüne yolla
+    const reportData = await processPosUpload(req.file.buffer);
+    
+    // Eşleşenleri anında Meta CAPI'ye fırlat
+    await processCapiBatch(reportData.matches);
+
+    res.json({ success: true, report: reportData });
+  } catch (err) {
+    console.error('Upload error:', err);
+    res.status(500).json({ error: 'Internal Server Error', details: err.message });
   }
 });
 
