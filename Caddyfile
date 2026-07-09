@@ -1,0 +1,3 @@
+test1.republique.tr {
+    reverse_proxy app:3000
+}
