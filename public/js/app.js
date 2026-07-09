@@ -5,6 +5,70 @@ document.addEventListener('DOMContentLoaded', () => {
   let menuData = null;
   let categoryElements = []; 
 
+  // --- Tracking Logic ---
+  function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+    return null;
+  }
+
+  function setCookie(name, value, days) {
+    const d = new Date();
+    d.setTime(d.getTime() + (days*24*60*60*1000));
+    document.cookie = `${name}=${value};expires=${d.toUTCString()};path=/`;
+  }
+
+  function generateId() {
+    return 'rep_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+  }
+
+  async function initTracking() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const params = {
+      masa: urlParams.get('masa') || 'Bilinmiyor',
+      utm_source: urlParams.get('utm_source'),
+      utm_medium: urlParams.get('utm_medium'),
+      utm_campaign: urlParams.get('utm_campaign'),
+      utm_content: urlParams.get('utm_content'),
+      utm_term: urlParams.get('utm_term'),
+      fbclid: urlParams.get('fbclid'),
+    };
+
+    let rep_id = getCookie('rep_id');
+    if (!rep_id) {
+      rep_id = generateId();
+      setCookie('rep_id', rep_id, 730); // 2 year cookie
+    }
+
+    // Wait a bit to let Meta Pixel initialize and set _fbp / _fbc
+    setTimeout(async () => {
+      const fbp = getCookie('_fbp');
+      const fbc = getCookie('_fbc');
+
+      try {
+        await fetch('/api/track', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            rep_id,
+            fbp,
+            fbc,
+            ...params
+          })
+        });
+      } catch (err) {
+        console.error('Tracking error', err);
+      }
+      
+      // Fire Meta Custom Event
+      if (typeof fbq === 'function') {
+        fbq('trackCustom', 'ViewMenu', { masa: params.masa });
+      }
+    }, 1000); // 1 second delay
+  }
+  // ----------------------
+
   async function fetchMenu() {
     try {
       const response = await fetch('/api/menu');
@@ -128,5 +192,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  initTracking();
   fetchMenu();
 });
