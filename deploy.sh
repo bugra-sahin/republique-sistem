@@ -6,5 +6,7 @@ systemctl stop nginx || true
 systemctl disable nginx || true
 
 cd /opt/republique
-git pull --ff-only
+# Depoyu her durumda en guncel hale zorla (ff-only takilmalarini onler, kendini iyilestirir)
+git fetch origin
+git reset --hard origin/main
 docker compose up -d --build
