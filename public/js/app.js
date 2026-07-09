@@ -130,7 +130,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     menuData.forEach((category, index) => {
-      if (category.isVisible === false) return; // Kategori gizliyse tamamen atla
+      if (category.isVisible === false || category.name === 'Personel' || category.name === 'Ekstra İstek') return; // Kategori gizliyse tamamen atla
 
       // Üst menü butonu (Seviye 1: Menü Bölümü)
       const btn = document.createElement('button');
