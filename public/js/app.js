@@ -130,9 +130,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     menuData.forEach((category, index) => {
+      if (category.isVisible === false) return; // Kategori gizliyse tamamen atla
+
       // Üst menü butonu (Seviye 1: Menü Bölümü)
       const btn = document.createElement('button');
-      btn.className = `cat-btn ${index === 0 ? 'active' : ''}`;
+      btn.className = `cat-btn ${categoryElements.length === 0 ? 'active' : ''}`;
       btn.innerText = category.name;
       const catId = `cat-${index}`;
       
@@ -166,33 +168,50 @@ document.addEventListener('DOMContentLoaded', () => {
           // Seviye 3: Ürünler (Products)
           if (section.products && section.products.length > 0) {
             section.products.forEach(product => {
-              // inStock kontrolü
               if (product.inStock === false) return;
 
-              const pCard = document.createElement('div');
-              pCard.className = 'product-card';
-              
-              // Varsayılan resim
-              const defaultImg = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="90" height="90" fill="%230a1f16"><rect width="90" height="90" fill="%2305100c"/><text x="45" y="45" fill="%23d4af37" font-size="12" font-family="sans-serif" text-anchor="middle" alignment-baseline="middle">REPUBLIQUE</text></svg>';
-              const imgSrc = product.image ? product.image : defaultImg;
-
-              const priceInfo = getActivePrice(product);
-              let priceHtml = '';
-              if (priceInfo.isDiscount) {
-                priceHtml = `<span style="text-decoration: line-through; opacity: 0.6; font-size: 0.9em; margin-right: 5px;">${priceInfo.originalPrice} ₺</span><span style="color: #d4af37; font-weight: bold; font-size: 1.1em;">${priceInfo.price} ₺</span>`;
+              let itemsToRender = [];
+              if (product.variations && product.variations.length > 0) {
+                product.variations.forEach(v => {
+                  if (v.inStock === false) return;
+                  itemsToRender.push({
+                    ...product,
+                    ...v, // Varyasyon özellikleri (fiyat, isim) ürünün üzerine yazar
+                    name: `${product.name} ${v.name && v.name.toLowerCase() !== 'normal' ? '- ' + v.name : ''}`.trim(),
+                    description: v.description || product.description,
+                    happyHourInfo: v.happyHourInfo || product.happyHourInfo
+                  });
+                });
               } else {
-                priceHtml = `${priceInfo.price} ₺`;
+                itemsToRender.push(product);
               }
 
-              pCard.innerHTML = `
-                <img src="${imgSrc}" class="product-img" alt="${product.name}" loading="lazy" onerror="this.src='${defaultImg}'">
-                <div class="product-info">
-                  <div class="product-name">${product.name}</div>
-                  <div class="product-desc">${product.description || ''}</div>
-                  <div class="product-price">${priceHtml}</div>
-                </div>
-              `;
-              catSection.appendChild(pCard);
+              itemsToRender.forEach(item => {
+                const pCard = document.createElement('div');
+                pCard.className = 'product-card';
+                
+                // SVG'yi base64 yaptık ki tarayıcılar kırık imaj sanmasın
+                const defaultImg = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI5MCIgaGVpZ2h0PSI5MCIgZmlsbD0iIzBhMWYxNiI+PHJlY3Qgd2lkdGg9IjkwIiBoZWlnaHQ9IjkwIiBmaWxsPSIjMDUxMDBjIi8+PHRleHQgeD0iNDUiIHk9IjQ1IiBmaWxsPSIjZDRhZjM3IiBmb250LXNpemU9IjEyIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgYWxpZ25tZW50LWJhc2VsaW5lPSJtaWRkbGUiPlJFUFVCTElRVUU8L3RleHQ+PC9zdmc+';
+                const imgSrc = item.image ? item.image : (product.image ? product.image : defaultImg);
+
+                const priceInfo = getActivePrice(item);
+                let priceHtml = '';
+                if (priceInfo.isDiscount) {
+                  priceHtml = `<span style="text-decoration: line-through; opacity: 0.6; font-size: 0.9em; margin-right: 5px;">${priceInfo.originalPrice} ₺</span><span style="color: #d4af37; font-weight: bold; font-size: 1.1em;">${priceInfo.price} ₺</span>`;
+                } else {
+                  priceHtml = `${priceInfo.price} ₺`;
+                }
+
+                pCard.innerHTML = `
+                  <img src="${imgSrc}" class="product-img" alt="${item.name}" loading="lazy" onerror="this.src='${defaultImg}'">
+                  <div class="product-info">
+                    <div class="product-name">${item.name}</div>
+                    <div class="product-desc">${item.description || ''}</div>
+                    <div class="product-price">${priceHtml}</div>
+                  </div>
+                `;
+                catSection.appendChild(pCard);
+              });
             });
           }
         });
