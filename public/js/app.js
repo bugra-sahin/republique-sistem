@@ -25,8 +25,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function initTracking() {
     const urlParams = new URLSearchParams(window.location.search);
+    
+    let tableParam = urlParams.get('masa') || urlParams.get('table');
+    if (!tableParam && window.location.pathname.startsWith('/menu/')) {
+      tableParam = window.location.pathname.replace('/menu/', '').replace('/', '');
+    }
+
     const params = {
-      masa: urlParams.get('masa') || 'Bilinmiyor',
+      masa: tableParam || 'Bilinmiyor',
       utm_source: urlParams.get('utm_source'),
       utm_medium: urlParams.get('utm_medium'),
       utm_campaign: urlParams.get('utm_campaign'),
