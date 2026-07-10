@@ -106,8 +106,11 @@
       history.push({ role: 'assistant', content: reply, _sent: true });
       // Menude bolum acma: AI bir kategori isaret ettiyse menuyu oraya kaydir
       if (data && data.goto) {
+        const norm = x => String(x).toLowerCase().replace(/ı/g,'i').replace(/ü/g,'u').replace(/ö/g,'o').replace(/ç/g,'c').replace(/ş/g,'s').replace(/ğ/g,'g').replace(/[^a-z0-9]/g,'');
+        const g = norm(data.goto);
         const btns = [...document.querySelectorAll('.cat-btn')];
-        const b = btns.find(x => x.textContent.trim().toLowerCase() === String(data.goto).trim().toLowerCase());
+        let b = btns.find(x => norm(x.textContent) === g);
+        if (!b) b = btns.find(x => norm(x.textContent).includes(g) || g.includes(norm(x.textContent)));
         if (b) { close(); setTimeout(() => b.click(), 250); }
       }
     } catch (e) {
