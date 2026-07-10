@@ -104,6 +104,12 @@
       const reply = (data && data.reply) || 'Su an yanit veremiyorum.';
       addMsg('assistant', reply);
       history.push({ role: 'assistant', content: reply, _sent: true });
+      // Menude bolum acma: AI bir kategori isaret ettiyse menuyu oraya kaydir
+      if (data && data.goto) {
+        const btns = [...document.querySelectorAll('.cat-btn')];
+        const b = btns.find(x => x.textContent.trim().toLowerCase() === String(data.goto).trim().toLowerCase());
+        if (b) { close(); setTimeout(() => b.click(), 250); }
+      }
     } catch (e) {
       typing.remove();
       addMsg('assistant', 'Baglanti sorunu yasadim, birazdan tekrar deneyin.');
