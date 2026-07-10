@@ -172,12 +172,24 @@ async function chatWithWaiter({ message, repId, ip, history, table }) {
       ? await callGemini(system, msgs, geminiKey)
       : await callAnthropic(system, msgs, anthropicKey);
     if (!text) text = 'Bunu tam anlayamadim, menuyle ilgili baska nasil yardimci olabilirim?';
+    text = sanitizeReply(text);
     if (text.length > 1500) text = text.slice(0, 1500);
     return { reply: text, ok: true };
   } catch (e) {
     console.error('AI garson hatasi:', e.response ? JSON.stringify(e.response.data).slice(0, 400) : e.message);
     return { reply: 'Su an kucuk bir aksaklik yasadim, birazdan tekrar dener misiniz? Dilerseniz garsonumuz da yardimci olur.', ok: false };
   }
+}
+
+// Cikti temizleyici: markdown bold/italik/baslik ve fazla madde/emoji isaretlerini sadelestir (ev sahibi tonu)
+function sanitizeReply(t) {
+  return String(t)
+    .replace(/\*\*(.*?)\*\*/g, '$1')      // **kalin** -> kalin
+    .replace(/(^|[^*])\*(?!\*)([^*\n]+?)\*(?!\*)/g, '$1$2') // *italik* -> italik
+    .replace(/^#{1,6}\s*/gm, '')            // ## baslik -> baslik
+    .replace(/^\s*[-•]\s+/gm, '')           // - madde -> madde (satir basi)
+    .replace(/\n{3,}/g, '\n\n')             // fazla bos satiri kis
+    .trim();
 }
 
 // ANTHROPIC (Claude) cagrisi
