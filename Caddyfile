@@ -1,3 +1,9 @@
 test1.republique.tr {
-    reverse_proxy app:3000
+    redir /erp /erp/
+    handle_path /erp/* {
+        reverse_proxy erp:8000
+    }
+    handle {
+        reverse_proxy app:3000
+    }
 }

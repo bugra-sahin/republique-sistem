@@ -24,6 +24,14 @@ services:
     ports:
       - "127.0.0.1:3000:3000"
 
+  erp:
+    build: ./erp
+    restart: unless-stopped
+    volumes:
+      - erpdata:/data
+    ports:
+      - "127.0.0.1:8000:8000"
+
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
@@ -39,8 +47,10 @@ services:
       - caddy_config:/config
     depends_on:
       - app
+      - erp
 
 volumes:
   dbdata:
+  erpdata:
   caddy_data:
   caddy_config:
