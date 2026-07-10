@@ -15,6 +15,10 @@ db.query(`CREATE TABLE IF NOT EXISTS chat_logs (
   user_msg TEXT, ai_reply TEXT, provider TEXT, created_at TIMESTAMPTZ DEFAULT now()
 )`).catch(e => console.error("chat_logs tablo:", e.message));
 
+db.query(`CREATE TABLE IF NOT EXISTS product_views (
+  id SERIAL PRIMARY KEY, product TEXT, rep_id TEXT, table_name TEXT, created_at TIMESTAMPTZ DEFAULT now()
+)`).catch(e => console.error("product_views tablo:", e.message));
+
 // LLM anahtarlarini kalici gizli dosyadan yukle (/secrets/llm.env)
 (function loadLlmSecrets() {
   try {
@@ -88,6 +92,30 @@ app.post("/api/chat", async (req, res) => {
     console.error("/api/chat hata:", e.message);
     res.status(500).json({ reply: "Su an yanit veremiyorum, birazdan tekrar deneyin.", ok: false });
   }
+});
+
+// Urun goruntuleme loglama (en cok bakilanlar icin)
+app.post("/api/track-view", async (req, res) => {
+  try {
+    const { product, table, rep_id } = req.body || {};
+    if (product) {
+      db.query("INSERT INTO product_views (product, rep_id, table_name) VALUES ($1,$2,$3)",
+        [String(product).slice(0,200), rep_id || null, table || null]).catch(() => {});
+    }
+    res.json({ ok: true });
+  } catch (e) { res.status(200).json({ ok: false }); }
+});
+
+// En cok bakilan urunler (admin)
+app.get("/api/admin/top-products", async (req, res) => {
+  try {
+    const days = Math.min(365, parseInt(req.query.days) || 30);
+    const { rows } = await db.query(
+      "SELECT product, COUNT(*)::int AS goruntuleme FROM product_views WHERE created_at >= now() - ($1||' days')::interval GROUP BY product ORDER BY goruntuleme DESC LIMIT 50",
+      [String(days)]
+    );
+    res.json({ ok: true, urunler: rows });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 // ============ TEK SEFERLIK LLM ANAHTAR KURULUMU (kurulumdan sonra kaldirilacak) ============
