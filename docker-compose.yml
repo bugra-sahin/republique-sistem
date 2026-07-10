@@ -21,6 +21,8 @@ services:
       DATABASE_URL: postgres://republique:${POSTGRES_PASSWORD}@db:5432/republique
     depends_on:
       - db
+    volumes:
+      - llmsecrets:/secrets
     ports:
       - "127.0.0.1:3000:3000"
 
@@ -51,6 +53,7 @@ services:
 
 volumes:
   dbdata:
+  llmsecrets:
   erpdata:
   caddy_data:
   caddy_config:

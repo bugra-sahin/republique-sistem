@@ -9,6 +9,20 @@ const { processPosUpload } = require("./src/matcher");
 const { processCapiBatch } = require("./src/capi-sender");
 const { chatWithWaiter } = require("./src/ai-waiter");
 
+// LLM anahtarlarini kalici gizli dosyadan yukle (/secrets/llm.env)
+(function loadLlmSecrets() {
+  try {
+    const fs = require("fs");
+    if (fs.existsSync("/secrets/llm.env")) {
+      for (const line of fs.readFileSync("/secrets/llm.env", "utf-8").split("\n")) {
+        const m = line.match(/^([A-Z_]+)=(.*)$/);
+        if (m) process.env[m[1]] = m[2];
+      }
+      console.log("LLM gizli anahtarlari yuklendi.");
+    }
+  } catch (e) { console.error("llm secrets load:", e.message); }
+})();
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -52,6 +66,68 @@ app.post("/api/chat", async (req, res) => {
     console.error("/api/chat hata:", e.message);
     res.status(500).json({ reply: "Su an yanit veremiyorum, birazdan tekrar deneyin.", ok: false });
   }
+});
+
+// ============ TEK SEFERLIK LLM ANAHTAR KURULUMU (kurulumdan sonra kaldirilacak) ============
+app.post("/api/setup-llm", async (req, res) => {
+  try {
+    const { provider, key } = req.body || {};
+    if (!key || typeof key !== "string" || key.trim().length < 20) {
+      return res.status(400).json({ ok: false, error: "Anahtar gecersiz veya eksik." });
+    }
+    const varName = provider === "gemini" ? "GEMINI_API_KEY" : "ANTHROPIC_API_KEY";
+    const fs = require("fs");
+    try { fs.mkdirSync("/secrets", { recursive: true }); } catch (e) {}
+    const store = {};
+    try {
+      if (fs.existsSync("/secrets/llm.env")) {
+        for (const l of fs.readFileSync("/secrets/llm.env", "utf-8").split("\n")) {
+          const m = l.match(/^([A-Z_]+)=(.*)$/); if (m) store[m[1]] = m[2];
+        }
+      }
+    } catch (e) {}
+    store[varName] = key.trim();
+    fs.writeFileSync("/secrets/llm.env", Object.keys(store).map(k => k + "=" + store[k]).join("\n") + "\n");
+    process.env[varName] = key.trim();
+    res.json({ ok: true, provider: varName });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get("/setup-llm", (req, res) => {
+  res.type("html").send(`<!doctype html><html lang=tr><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1"><title>Republique AI Kurulum</title>
+<style>body{background:#141210;color:#eee;font-family:system-ui,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0}
+.c{background:#1c1a16;border:1px solid #3a2f1c;border-radius:16px;padding:28px;max-width:440px;width:92%}
+h1{font-size:19px;color:#c9a24b;margin:0 0 6px}p{color:#a99;font-size:14px;line-height:1.5}
+label{display:block;margin:14px 0 6px;font-size:14px}select,input{width:100%;box-sizing:border-box;padding:12px;border-radius:10px;border:1px solid #3a2f1c;background:#241f18;color:#fff;font-size:15px}
+button{margin-top:18px;width:100%;padding:13px;border:0;border-radius:10px;background:#c9a24b;color:#1a1410;font-weight:700;font-size:15px;cursor:pointer}
+.msg{margin-top:14px;font-size:14px;padding:10px;border-radius:8px;display:none}.ok{background:#173a24;color:#8f8}.err{background:#3a1717;color:#f99}</style></head>
+<body><div class=c><h1>Republique AI — Anahtar Kurulumu</h1>
+<p>Sağlayıcıyı seç, API anahtarını kutuya <b>yapıştır</b> ve Kaydet'e bas. Anahtar yalnızca sunucuda saklanır.</p>
+<label>Sağlayıcı</label>
+<select id=prov><option value=anthropic>Claude (Anthropic)</option><option value=gemini>Gemini (Google)</option></select>
+<label>API Anahtarı</label>
+<input id=key type=password placeholder="sk-ant-... veya AIza..." autocomplete=off>
+<button id=btn>Kaydet ve Aktive Et</button>
+<div id=msg class=msg></div></div>
+<script>
+const msg=document.getElementById('msg');
+function show(t,ok){msg.style.display='block';msg.className='msg '+(ok?'ok':'err');msg.textContent=t;}
+document.getElementById('btn').onclick=async()=>{
+  const key=document.getElementById('key').value.trim();const provider=document.getElementById('prov').value;
+  if(key.length<20){show('Anahtar çok kısa görünüyor.',false);return;}
+  show('Kaydediliyor...',true);
+  try{
+    const r=await fetch('/api/setup-llm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({provider,key})}).then(x=>x.json());
+    if(!r.ok){show('Hata: '+(r.error||'bilinmiyor'),false);return;}
+    show('Kaydedildi ✓ Test ediliyor...',true);
+    const t=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:'Merhaba, kısa bir öneri ver',table:'kurulum-testi'})}).then(x=>x.json());
+    show('✓ Çalışıyor! Republique AI yanıtı: '+(t.reply||'(bos)'),true);
+  }catch(e){show('Bağlantı hatası: '+e.message,false);}
+};
+</script></body></html>`);
 });
 
 app.post("/api/track", async (req, res) => {
