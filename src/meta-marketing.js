@@ -12,6 +12,9 @@ const ACCOUNTS = {
 const PAGE_ID = process.env.META_PAGE_ID || "210086415512430";
 const IG_USER_ID_FALLBACK = process.env.META_IG_USER_ID || "17841445523094763";
 const MENU_URL = process.env.MENU_URL || "https://test1.republique.tr/menu?utm_source=meta&utm_medium=paid";
+const PIXEL_ID = process.env.META_PIXEL_ID || "858472356496034";
+// Ankara ozel konum (Reklam1TL kanitlanmis yapisindan): Kizilay/Tunali merkez, 25km
+const ANKARA_GEO = { custom_locations: [{ latitude: 39.905758, longitude: 32.860404, radius: 25, distance_unit: "kilometer" }] };
 
 function getToken() {
   const token = process.env.META_SYSTEM_USER_TOKEN;
@@ -92,7 +95,7 @@ async function createDraftAdFromIG(mediaId, options = {}) {
       object_id: PAGE_ID,
       instagram_user_id: igUserId,
       source_instagram_media_id: mediaId,
-      call_to_action: JSON.stringify({ type: 'LEARN_MORE', value: { link: MENU_URL } }),
+      call_to_action: JSON.stringify({ type: 'VIEW_MENU', value: { link: MENU_URL } }),
       access_token: token
     });
     created.creative_id = creativeRes.data.id;
@@ -100,7 +103,7 @@ async function createDraftAdFromIG(mediaId, options = {}) {
     // 2) Kampanya (PAUSED)
     const campRes = await axios.post(`${BASE_URL}/${accountId}/campaigns`, {
       name: `[TASLAK] IG Reklam - ${mediaId}`,
-      objective: 'OUTCOME_TRAFFIC',
+      objective: 'OUTCOME_SALES',
       status: 'PAUSED',
       special_ad_categories: [],
       access_token: token
@@ -113,9 +116,10 @@ async function createDraftAdFromIG(mediaId, options = {}) {
       campaign_id: created.campaign_id,
       daily_budget: dailyBudget,
       billing_event: 'IMPRESSIONS',
-      optimization_goal: 'LINK_CLICKS',
+      optimization_goal: 'OFFSITE_CONVERSIONS',
+      promoted_object: JSON.stringify({ pixel_id: PIXEL_ID, custom_event_type: 'PURCHASE' }),
       bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
-      targeting: JSON.stringify({ geo_locations: { countries: ['TR'] }, age_min: 18 }),
+      targeting: JSON.stringify({ geo_locations: ANKARA_GEO, age_min: 18 }),
       status: 'PAUSED',
       access_token: token
     });
