@@ -7,6 +7,7 @@ const db = require("./src/db");
 const multer = require("multer");
 const { processPosUpload } = require("./src/matcher");
 const { processCapiBatch } = require("./src/capi-sender");
+const { chatWithWaiter } = require("./src/ai-waiter");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -36,6 +37,20 @@ app.get("/api/menu", (req, res) => {
     res.json(menu);
   } else {
     res.status(500).json({ error: "Menu henuz hazir degil" });
+  }
+});
+
+// ============ REPUBLIQUE AI GARSON ============
+app.post("/api/chat", async (req, res) => {
+  try {
+    const { message, history } = req.body || {};
+    const repId = (req.cookies && req.cookies.rep_id) || null;
+    const ip = (req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0].trim();
+    const result = await chatWithWaiter({ message, repId, ip, history });
+    res.json(result);
+  } catch (e) {
+    console.error("/api/chat hata:", e.message);
+    res.status(500).json({ reply: "Su an yanit veremiyorum, birazdan tekrar deneyin.", ok: false });
   }
 });
 
