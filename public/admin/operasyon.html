@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Republique Admin Paneli</title>
+  <link rel="stylesheet" href="/admin/css/admin.css">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,600;1,600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+</head>
+<body>
+  <div class="bg-gradient"></div>
+
+  <nav class="navbar">
+    <div class="brand">Republique AI</div>
+    <div class="nav-tabs">
+      <button class="tab-btn active" data-tab="tab-live">Canlı Akış</button>
+      <button class="tab-btn" data-tab="tab-upload">Adisyon Yükle</button>
+      <button class="tab-btn" data-tab="tab-reports">Günün Özeti</button>
+    </div>
+  </nav>
+
+  <main class="container">
+    
+    <!-- Sekme 1: Canlı Akış -->
+    <div id="tab-live" class="tab-content active">
+      <div class="glass-card">
+        <h2>Canlı QR Okutma Akışı</h2>
+        <div class="table-wrapper">
+          <table id="liveScansTable">
+            <thead>
+              <tr>
+                <th>Saat</th>
+                <th>Masa</th>
+                <th>Cihaz</th>
+                <th>Reklam Kaynağı</th>
+                <th>Müşteri ID</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="5" style="text-align:center; color: var(--text-secondary);">Yükleniyor...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sekme 2: Adisyon Yükle -->
+    <div id="tab-upload" class="tab-content">
+      <div class="glass-card">
+        <h2>Gece Kapanış Dosyası Yükle</h2>
+        <p style="color: var(--text-secondary); margin-bottom: 2rem;">
+          PionPOS'tan aldığınız "Adisyon Listesi.xlsx" veya ".csv" formatındaki dosyayı buraya sürükleyin.
+          Sistem otomatik olarak saniyeler içinde adisyonlarla QR okutanları eşleştirecektir.
+        </p>
+
+        <div class="upload-area" id="uploadArea">
+          <span class="material-icons-round upload-icon">cloud_upload</span>
+          <h3>Dosyayı Sürükleyin veya Tıklayın</h3>
+          <p style="color: var(--text-secondary); margin-top: 0.5rem;">.xlsx, .csv desteklenir</p>
+          <input type="file" id="fileInput" accept=".xlsx, .csv" style="display: none;">
+        </div>
+
+        <div id="uploadStatus" style="margin-top: 2rem; display: none;">
+          <h3 id="uploadMessage" style="color: var(--accent-green);">İşleniyor...</h3>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sekme 3: Günün Özeti (Rapor) -->
+    <div id="tab-reports" class="tab-content">
+      
+      <div class="dashboard-grid">
+        <div class="stat-card highlight">
+          <span class="stat-title">Reklamdan Gelen Toplam Ciro</span>
+          <span class="stat-value blue" id="statTotalAdRev">0 TL</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-title">İlk Kez Reklamla Gelen (Yeni)</span>
+          <span class="stat-value green" id="statNewRev">0 TL</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-title">Reklam Gören Arkadaşı İle Gelen</span>
+          <span class="stat-value yellow" id="statHaloRev">0 TL</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-title">Retargeting (Sadık Müşteri)</span>
+          <span class="stat-value" id="statRetargetRev" style="color: var(--accent-purple);">0 TL</span>
+        </div>
+      </div>
+
+      <div class="glass-card">
+        <h2>Eşleşen Adisyonlar (Ayrıntılı Rapor)</h2>
+        <div class="table-wrapper">
+          <table id="reportsTable">
+            <thead>
+              <tr>
+                <th>Saat</th>
+                <th>Masa</th>
+                <th>Toplam Hesap</th>
+                <th>Kişi Başı</th>
+                <th>Etiket</th>
+                <th>Meta CAPI</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="6" style="text-align:center; color: var(--text-secondary);">Henüz veri yüklenmedi.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <button id="btnSendToMeta" class="btn-primary" style="display:none; margin-top: 2rem;">
+          <span class="material-icons-round" style="vertical-align: middle; margin-right: 8px;">send</span>
+          Meta CAPI'ye Gönder
+        </button>
+      </div>
+
+    </div>
+  </main>
+
+  <script src="/admin/js/admin.js"></script>
+</body>
+</html>

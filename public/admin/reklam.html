@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="tr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reklam Yönetimi</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+<style>
+ :root{--bg:#0f120f;--panel:#141a15;--line:#2a3a2c;--ink:#efe7d6;--muted:#9fb0a0;--gold:#c9a24b;--green:#2a5a44}
+ *{box-sizing:border-box;margin:0;padding:0}
+ body{background:var(--bg);color:var(--ink);font-family:'Outfit',system-ui,sans-serif;padding:22px}
+ h1{font-size:20px;color:var(--gold);margin-bottom:4px}
+ .sub{color:var(--muted);font-size:13px;margin-bottom:20px}
+ h2{font-size:16px;margin:24px 0 12px;color:var(--gold)}
+ .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
+ .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:8px}
+ .cap{font-size:13px;color:var(--ink);min-height:34px;line-height:1.35}
+ .type{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+ button{background:var(--gold);border:0;color:#1a1410;font-weight:700;border-radius:10px;padding:9px;cursor:pointer;font-family:inherit;font-size:13px}
+ button:disabled{opacity:.5}
+ .kampanya{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:10px}
+ .kName{font-weight:600}.kMeta{color:var(--muted);font-size:12px;margin-top:4px}
+ .msg{margin:10px 0;padding:10px;border-radius:8px;font-size:13px;display:none}
+ .ok{background:#173a24;color:#8f8}.err{background:#3a1717;color:#f99}
+ .note{background:rgba(201,162,75,.08);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:13px;color:var(--muted);margin-bottom:18px}
+</style></head>
+<body>
+ <h1>Reklam Yönetimi</h1>
+ <div class="sub">Instagram gönderilerinden taslak (PAUSED) satış reklamı oluştur · Kampanya özeti</div>
+ <div class="note">Güvenlik: AI yalnızca <b>DURAKLATILMIŞ taslak</b> oluşturur; bütçe/yayına alma kararı sizindir. Meta işletme doğrulaması onaylandığında taslaklar gerçek oluşur.</div>
+ <div id="msg" class="msg"></div>
+
+ <h2>Instagram Gönderileri</h2>
+ <div class="grid" id="igGrid"><div class="type">Yükleniyor...</div></div>
+
+ <h2>Kampanyalar (Reklam Hesapları)</h2>
+ <div id="kampanyalar"><div class="type">Yükleniyor...</div></div>
+
+<script>
+const msg=document.getElementById('msg');
+function show(t,ok){msg.style.display='block';msg.className='msg '+(ok?'ok':'err');msg.textContent=t;}
+async function loadIG(){
+  try{
+    const j=await fetch('/api/admin/ads/ig-media').then(r=>r.json());
+    const arr=Array.isArray(j)?j:(j.data||[]);
+    const g=document.getElementById('igGrid');
+    if(!arr.length){g.innerHTML='<div class="type">Gönderi bulunamadı.</div>';return;}
+    g.innerHTML='';
+    arr.slice(0,12).forEach(m=>{
+      const d=document.createElement('div');d.className='card';
+      d.innerHTML=`<div class="type">${m.media_type||''}</div><div class="cap">${(m.caption||'').slice(0,70)}</div>`;
+      const b=document.createElement('button');b.textContent='Taslak Reklam Oluştur';
+      b.onclick=async()=>{const bud=prompt('Günlük bütçe (TL):','100');if(!bud)return;b.disabled=true;show('Oluşturuluyor...',true);
+        try{const r=await fetch('/api/admin/ads/ig-drafts/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mediaId:m.id,budget:parseInt(bud)})}).then(x=>x.json());
+          if(r.success||r.campaign_id){show('✓ Taslak oluşturuldu (PAUSED). Meta doğrulaması sonrası aktifleşir.',true);}else{show('Hata: '+(r.error||'bilinmiyor'),false);}
+        }catch(e){show('Bağlantı hatası: '+e.message,false);}finally{b.disabled=false;}};
+      d.appendChild(b);g.appendChild(d);
+    });
+  }catch(e){document.getElementById('igGrid').innerHTML='<div class="type">Yüklenemedi: '+e.message+'</div>';}
+}
+async function loadKampanya(){
+  const box=document.getElementById('kampanyalar');box.innerHTML='';
+  for(const acc of [['Reklam 2 TL','active'],['Reklam 1 TL','old']]){
+    try{
+      const h=await fetch('/api/admin/ads/hierarchy?account='+acc[1]).then(r=>r.json());
+      const camps=Array.isArray(h)?h:(h.hierarchy||h.data||[]);
+      const d=document.createElement('div');d.className='kampanya';
+      d.innerHTML=`<div class="kName">${acc[0]}</div><div class="kMeta">${camps.length} kampanya</div>`;
+      box.appendChild(d);
+    }catch(e){}
+  }
+  if(!box.children.length)box.innerHTML='<div class="type">Kampanya verisi alınamadı.</div>';
+}
+loadIG();loadKampanya();
+</script>
+</body></html>
