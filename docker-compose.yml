@@ -23,6 +23,7 @@ services:
       - db
     volumes:
       - llmsecrets:/secrets
+      - menudata:/app/data
     ports:
       - "127.0.0.1:3000:3000"
 
@@ -53,6 +54,7 @@ services:
 
 volumes:
   dbdata:
+  menudata:
   llmsecrets:
   erpdata:
   caddy_data:

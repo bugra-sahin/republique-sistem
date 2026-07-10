@@ -396,4 +396,16 @@ app.listen(PORT, "0.0.0.0", async () => {
   startFirestoreListener(() => {
     updateMenu().catch(err => console.error("Menu guncelleme hatasi:", err));
   });
+  // Menu bos ise otomatik tekrar cek (puppeteer ara sira basarisiz oluyor). Kalici volume (menudata)
+  // sayesinde bir kez yuklenince restart'ta hemen hazir olur.
+  setInterval(() => {
+    if (!getCachedMenu()) {
+      console.log("Menu bos, tekrar cekiliyor...");
+      updateMenu().catch(err => console.error("Menu retry hatasi:", err.message));
+    }
+  }, 60000);
+  // 30 dakikada bir tazele (fiyat/stok degisimi Firestore push disinda da yakalansin)
+  setInterval(() => {
+    updateMenu().catch(err => console.error("Menu periyodik guncelleme hatasi:", err.message));
+  }, 30 * 60000);
 });
