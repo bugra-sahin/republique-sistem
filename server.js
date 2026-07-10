@@ -9,6 +9,12 @@ const { processPosUpload } = require("./src/matcher");
 const { processCapiBatch } = require("./src/capi-sender");
 const { chatWithWaiter } = require("./src/ai-waiter");
 
+// AI sohbet gecmisi tablosu (ilk ay+ kayit; ogrenme/analiz icin)
+db.query(`CREATE TABLE IF NOT EXISTS chat_logs (
+  id SERIAL PRIMARY KEY, rep_id TEXT, table_name TEXT,
+  user_msg TEXT, ai_reply TEXT, provider TEXT, created_at TIMESTAMPTZ DEFAULT now()
+)`).catch(e => console.error("chat_logs tablo:", e.message));
+
 // LLM anahtarlarini kalici gizli dosyadan yukle (/secrets/llm.env)
 (function loadLlmSecrets() {
   try {
@@ -62,6 +68,14 @@ app.post("/api/chat", async (req, res) => {
     const ip = (req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0].trim();
     const result = await chatWithWaiter({ message, repId, ip, history, table });
     res.json(result);
+    // Sohbeti kaydet (yalnizca gercek yanitlari)
+    if (result && result.ok && !result.queued && !result.notable && result.reply && message) {
+      db.query(
+        "INSERT INTO chat_logs (rep_id, table_name, user_msg, ai_reply, provider) VALUES ($1,$2,$3,$4,$5)",
+        [repId || null, table || null, String(message).slice(0,2000), String(result.reply).slice(0,4000),
+         process.env.GEMINI_API_KEY ? "gemini" : "anthropic"]
+      ).catch(e => console.error("chat_logs insert:", e.message));
+    }
   } catch (e) {
     console.error("/api/chat hata:", e.message);
     res.status(500).json({ reply: "Su an yanit veremiyorum, birazdan tekrar deneyin.", ok: false });
@@ -93,6 +107,17 @@ app.post("/api/setup-llm", async (req, res) => {
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
+});
+
+app.get("/api/admin/chat-logs", async (req, res) => {
+  try {
+    const days = Math.min(90, parseInt(req.query.days) || 1);
+    const { rows } = await db.query(
+      "SELECT id, rep_id, table_name, user_msg, ai_reply, provider, created_at FROM chat_logs WHERE created_at >= now() - ($1||' days')::interval ORDER BY created_at DESC LIMIT 2000",
+      [String(days)]
+    );
+    res.json({ ok: true, count: rows.length, logs: rows });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.get("/setup-llm", (req, res) => {
