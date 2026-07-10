@@ -85,6 +85,9 @@ app.post("/api/chat", async (req, res) => {
 // ============ TEK SEFERLIK LLM ANAHTAR KURULUMU (kurulumdan sonra kaldirilacak) ============
 app.post("/api/setup-llm", async (req, res) => {
   try {
+    if (process.env.ANTHROPIC_API_KEY || process.env.GEMINI_API_KEY) {
+      return res.status(403).json({ ok: false, error: "Anahtar zaten kurulu. Bu sayfa guvenlik icin devre disi. Degistirmek icin yoneticinize basvurun." });
+    }
     const { provider, key } = req.body || {};
     if (!key || typeof key !== "string" || key.trim().length < 20) {
       return res.status(400).json({ ok: false, error: "Anahtar gecersiz veya eksik." });
@@ -121,6 +124,9 @@ app.get("/api/admin/chat-logs", async (req, res) => {
 });
 
 app.get("/setup-llm", (req, res) => {
+  if (process.env.ANTHROPIC_API_KEY || process.env.GEMINI_API_KEY) {
+    return res.type("html").send('<!doctype html><meta charset=utf-8><body style="background:#141210;color:#c9a24b;font-family:system-ui;display:flex;min-height:100vh;align-items:center;justify-content:center;text-align:center"><div><h2>Republique AI kurulumu tamamlandi ✓</h2><p style="color:#a99">Bu sayfa guvenlik icin devre disi birakildi.</p></div></body>');
+  }
   res.type("html").send(`<!doctype html><html lang=tr><head><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1"><title>Republique AI Kurulum</title>
 <style>body{background:#141210;color:#eee;font-family:system-ui,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0}
