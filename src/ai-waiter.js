@@ -4,7 +4,7 @@
 const axios = require('axios');
 const { getCachedMenu } = require('./menu-fetcher');
 
-const MODEL = process.env.LLM_MODEL || 'claude-haiku-4-5-20251001';
+const MODEL = process.env.LLM_MODEL || 'claude-sonnet-4-6';
 const MAX_INPUT_CHARS = 500;
 const RATE_PER_MIN = 10;
 const RATE_PER_DAY = 60;
