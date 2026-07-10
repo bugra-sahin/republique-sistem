@@ -513,7 +513,10 @@ def restore_db_page():
     return HTMLResponse('<!doctype html><meta charset=utf-8><body style="background:#141210;color:#eee;font-family:system-ui;display:flex;min-height:100vh;align-items:center;justify-content:center"><form action="/erp/api/restore-db" method="post" enctype="multipart/form-data" style="background:#1c1a16;border:1px solid #3a2f1c;border-radius:14px;padding:26px;max-width:400px"><h3 style="color:#c9a24b">ERP Veri Yukleme</h3><p style="color:#a99;font-size:14px">Mevcut erp.db dosyanizi secip yukleyin. Yukleme sonrasi sistem yeniden baslatilacak.</p><input type=file name=file accept=".db" required style="width:100%;margin:12px 0;color:#fff"><button style="width:100%;padding:12px;background:#c9a24b;border:0;border-radius:10px;font-weight:700;cursor:pointer">Yukle</button></form></body>')
 
 @app.post("/api/restore-db")
-async def restore_db(file: UploadFile = File(...)):
+async def restore_db(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    # Guard: veri zaten yuklenmisse (tedarikci varsa) reddet — yikici uzerine yazma onlensin
+    if db.query(Supplier).count() > 0:
+        raise HTTPException(403, "Veri zaten yuklu. Guvenlik icin bu islem devre disi.")
     content = await file.read()
     if len(content) < 1000 or content[:15] != b"SQLite format 3":
         raise HTTPException(400, "Gecerli bir SQLite (.db) dosyasi degil.")
