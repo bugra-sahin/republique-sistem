@@ -8,6 +8,19 @@ const MODEL = process.env.LLM_MODEL || 'claude-haiku-4-5-20251001';
 const MAX_INPUT_CHARS = 500;
 const RATE_PER_MIN = 10;
 const RATE_PER_DAY = 60;
+// Saglayici (Gemini ucretsiz kota ~10/dk) GLOBAL siniri: guvenli 8/dk. Dolunca sira.
+const PROVIDER_MAX_PER_MIN = parseInt(process.env.LLM_MAX_PER_MIN) || 8;
+const providerWindow = [];
+function providerSlot() {
+  const now = Date.now();
+  while (providerWindow.length && now - providerWindow[0] > 60000) providerWindow.shift();
+  if (providerWindow.length >= PROVIDER_MAX_PER_MIN) {
+    const waitMs = 60000 - (now - providerWindow[0]);
+    return { ok: false, waitSeconds: Math.max(1, Math.ceil(waitMs / 1000)) };
+  }
+  providerWindow.push(now);
+  return { ok: true };
+}
 
 // Bellek-ici hiz limiti (rep_id + IP bazli)
 const hits = {}; // key -> { min:[ts...], day:[ts...] }
@@ -86,7 +99,7 @@ ${focus ? `- BU HAFTA ONE CIKAR: ${focus}` : ''}
 === MENU SONU ===`;
 }
 
-async function chatWithWaiter({ message, repId, ip, history }) {
+async function chatWithWaiter({ message, repId, ip, history, table }) {
   const key = (repId || ip || 'anon');
   // Girdi filtreleri
   if (typeof message !== 'string' || !message.trim()) {
@@ -99,10 +112,22 @@ async function chatWithWaiter({ message, repId, ip, history }) {
     return { reply: 'Cok hizli yaziyorsunuz, birazdan tekrar deneyin lutfen.', ok: true };
   }
 
+  // MASA KAPISI: Republique AI yalnizca masada (QR okutan) misafirlere hizmet verir
+  if (!table || table === 'Bilinmiyor' || table === 'undefined' || !String(table).trim()) {
+    return { ok: true, notable: true, reply: 'Republique AI, masanizdaki karekodu okuttugunuzda hizmetinizdedir 😊 Menuyu masanizdan acarsaniz size ozel oneriler sunabilirim.' };
+  }
+
   const geminiKey = process.env.GEMINI_API_KEY;
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
   if (!geminiKey && !anthropicKey) {
     return { reply: 'Republique AI su an hazirlaniyor, birazdan yaninizda olacak. Bu arada garsonumuz size yardimci olabilir. 🍸', ok: true, disabled: true };
+  }
+
+  // GLOBAL KOTA/SIRA: dakikalik saglayici siniri dolduysa misafiri siraya al
+  const slot = providerSlot();
+  if (!slot.ok) {
+    return { ok: true, queued: true, waitSeconds: slot.waitSeconds,
+      reply: `Republique AI su an diger misafirlerimize hizmet veriyor. Sizin siraniza yaklasik ${slot.waitSeconds} saniye... 🍸` };
   }
 
   const menuText = flattenMenu(getCachedMenu());
