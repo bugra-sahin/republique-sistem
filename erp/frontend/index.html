@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tedarikçi Yönetim & Cari Takip Sistemi</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo" style="text-align: center; padding-top: 10px;">
+                <img src="logo.png" alt="Republique Social House" style="max-width: 90%; max-height: 120px; object-fit: contain;">
+            </div>
+            <nav>
+                <ul>
+                    <li onclick="showPage('dashboard')">📊 Ana Ekran</li>
+                    <li onclick="openModal('addSupplierModal')">➕ Yeni Tedarikçi</li>
+                    <li onclick="openModal('addTransactionModal')">💸 Manuel İşlem</li>
+                    <li onclick="openModal('uploadPdfModal')">📄 Excel Fatura Listesi Yükle</li>
+                    <li onclick="openModal('importExcelModal')">📥 Eski Veriyi Aktar (Kurulum)</li>
+                    <li onclick="showPage('logs')">📜 Tüm İşlemler (Log)</li>
+                </ul>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="content">
+            <!-- Dashboard Page -->
+            <div id="dashboard" class="page active">
+                <header>
+                    <div class="header-left">
+                        <h1>Ana Ekran</h1>
+                        <p>Nakit projeksiyonunuzu görüntüleyin.</p>
+                    </div>
+                    <div class="header-right">
+                        <label for="targetDate">Proje Tarihi (Vadesi Gelenler İçin):</label>
+                        <input type="date" id="targetDate" onchange="loadDashboard()">
+                        <button class="btn btn-secondary" onclick="copyDuePayments()" style="margin-left: 10px;">📋 Kopyala</button>
+                    </div>
+                </header>
+
+                <div class="summary-cards">
+                    <div class="card warning">
+                        <h3>Toplam Vadesi Gelen (Seçili Tarihe Göre)</h3>
+                        <h2 id="totalDueAll">0.00 TL</h2>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table id="dashboardTable">
+                        <thead>
+                            <tr>
+                                <th>Tedarikçi Adı</th>
+                                <th>Vade Süresi (Gün)</th>
+                                <th>Vadesi Gelen Ödeme</th>
+                                <th>Toplam Cari (Güncel Borç)</th>
+                                <th>İşlem</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dashboardTbody">
+                            <!-- Populated via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Supplier Detail Page -->
+            <div id="supplierDetail" class="page" style="display:none;">
+                <header>
+                    <div class="header-left">
+                        <button class="back-btn" onclick="showPage('dashboard')">← Geri</button>
+                        <h1 id="detailName">Tedarikçi Adı</h1>
+                        <p>Vade: <span id="detailTerm"></span> Gün | Başlangıç Carisi: <span id="detailInitial"></span> TL</p>
+                    </div>
+                    <div class="header-right buttons">
+                        <label for="exportStart">Başlangıç:</label>
+                        <input type="date" id="exportStart" style="padding: 5px; border-radius: 5px; border: 1px solid #ddd; margin-right: 5px;">
+                        <label for="exportEnd">Bitiş:</label>
+                        <input type="date" id="exportEnd" style="padding: 5px; border-radius: 5px; border: 1px solid #ddd; margin-right: 15px;">
+                        
+                        <button class="btn btn-secondary" onclick="openEditSupplier()">✎ Düzenle</button>
+                        <button class="btn" style="background-color: var(--danger); color: white;" onclick="deleteSupplier()">🗑️ Sil</button>
+                        <button class="btn btn-primary" onclick="exportSupplier()">⬇ Excel'e Aktar</button>
+                    </div>
+                </header>
+                
+                <div class="summary-cards">
+                    <div class="card danger">
+                        <h3>Toplam Cari Hesap</h3>
+                        <h2 id="detailToplamCari">0.00 TL</h2>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <h3>Kronolojik Ekstre</h3>
+                    <table id="txTable">
+                        <thead>
+                            <tr>
+                                <th>Tarih</th>
+                                <th>Ödeme Tarihi</th>
+                                <th>Zaman Damgası</th>
+                                <th>İşlem Tipi</th>
+                                <th>Tutar</th>
+                                <th>İşlem</th>
+                            </tr>
+                        </thead>
+                        <tbody id="txTbody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Logs Page -->
+            <div id="logs" class="page" style="display:none;">
+                <header>
+                    <div class="header-left">
+                        <h1>Tüm İşlemler (Loglar)</h1>
+                        <p>Sistemdeki bütün geçmiş işlemleri kronolojik sırayla görün.</p>
+                    </div>
+                </header>
+                <div class="table-container">
+                    <table id="logsTable">
+                        <thead>
+                            <tr>
+                                <th>Tarih</th>
+                                <th>Zaman Damgası</th>
+                                <th>Tedarikçi</th>
+                                <th>İşlem Tipi</th>
+                                <th>Tutar</th>
+                                <th>İşlem</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logsTbody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modals -->
+    <div id="addSupplierModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('addSupplierModal')">&times;</span>
+            <h2>Yeni Tedarikçi Ekle</h2>
+            <form id="addSupplierForm" onsubmit="addSupplier(event)">
+                <label>Gündelik İsim:</label>
+                <input type="text" id="supName" required>
+                <label>Başlangıç Carisi (TL):</label>
+                <input type="number" step="0.01" id="supBal" value="0">
+                <label>Vade Süresi (Gün):</label>
+                <input type="number" id="supTerm" value="30">
+                <div style="margin-top:10px; margin-bottom:15px; display:flex; align-items:center; gap:8px;">
+                    <input type="checkbox" id="supManual">
+                    <label for="supManual" style="margin:0; font-weight:normal;">Ödeme Vadesini Fatura Bazında Manuel Seç</label>
+                </div>
+                <button type="submit" class="btn btn-primary">Kaydet</button>
+            </form>
+        </div>
+    </div>
+    
+    <div id="editSupplierModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('editSupplierModal')">&times;</span>
+            <h2>Tedarikçi Düzenle</h2>
+            <form id="editSupplierForm" onsubmit="updateSupplier(event)">
+                <label>Gündelik İsim:</label>
+                <input type="text" id="editSupName" required>
+                <label>Başlangıç Carisi (TL):</label>
+                <input type="number" step="0.01" id="editSupBal" value="0">
+                <label>Vade Süresi (Gün):</label>
+                <input type="number" id="editSupTerm" value="30">
+                <div style="margin-top:10px; margin-bottom:15px; display:flex; align-items:center; gap:8px;">
+                    <input type="checkbox" id="editSupManual">
+                    <label for="editSupManual" style="margin:0; font-weight:normal;">Ödeme Vadesini Fatura Bazında Manuel Seç</label>
+                </div>
+                <button type="submit" class="btn btn-primary">Güncelle</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="addTransactionModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('addTransactionModal')">&times;</span>
+            <h2>Manuel İşlem Gir</h2>
+            <form id="addTxForm" onsubmit="addTransaction(event)">
+                <label>Tedarikçi:</label>
+                <select id="txSupplier" onchange="checkManualDueDate()" required></select>
+                <label>İşlem Tipi:</label>
+                <select id="txType" required>
+                    <option value="Ödeme">Ödeme</option>
+                    <option value="Alım">Alım Faturası</option>
+                    <option value="İade">İade Faturası</option>
+                </select>
+                <label>Tarih:</label>
+                <input type="date" id="txDate" required>
+                <label>Tutar (TL):</label>
+                <input type="number" step="0.01" id="txAmount" required>
+                <div id="txDueDateGroup" style="display:none; margin-top:10px; margin-bottom:15px;">
+                    <label>Ödeme Vade Tarihi (Zorunlu):</label>
+                    <input type="date" id="txDueDate" class="input">
+                </div>
+                <button type="submit" class="btn btn-primary" style="margin-top:10px;">Ekle</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="uploadPdfModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('uploadPdfModal')">&times;</span>
+            <h2>Gelen Fatura Listesi (Excel) Yükle</h2>
+            <p>18.06... formatındaki yeni fatura listesi Excel'inizi yükleyin.</p>
+            <input type="file" id="pdfFile" accept=".xlsx,.xls">
+            <button class="btn btn-primary" onclick="uploadPdf()" id="pdfBtn">Listeyi Yükle ve Tara</button>
+            
+            <div id="mappingSection" style="display:none; margin-top: 20px;">
+                <h3 style="text-align:center; color: var(--danger);">⚠️ Bilinmeyen Unvanlar Bulundu</h3>
+                <p style="text-align:center;">Lütfen bu yasal unvanları sistemdeki tedarikçilerinizle eşleştirin:</p>
+                <div id="mappingList" style="max-height: 250px; overflow-y: auto; padding: 10px; border: 1px solid #ddd; border-radius: 5px; background: #fafafa;"></div>
+                <button class="btn btn-warning" onclick="commitPdfMappings()" style="margin-top: 15px; width: 100%;">Eşleştirmeleri Kaydet ve Aktar</button>
+            </div>
+            
+            <div id="previewSection" style="display:none; margin-top: 20px;">
+                <h3>📄 Okunan Faturalar (Önizleme)</h3>
+                <p>Aşağıdaki faturalar sisteme eklenecektir. Kontrol edip onaylayın:</p>
+                <div style="max-height: 250px; overflow-y: auto; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 5px;">
+                    <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                        <thead style="background-color: #f9f9f9; position: sticky; top: 0;">
+                            <tr>
+                                <th style="padding: 8px; border-bottom: 2px solid #ddd;">Tarih</th>
+                                <th style="padding: 8px; border-bottom: 2px solid #ddd;">Unvan (Okunan)</th>
+                                <th style="padding: 8px; border-bottom: 2px solid #ddd;">Eşleşen Tedarikçi</th>
+                                <th style="padding: 8px; border-bottom: 2px solid #ddd;">Ödeme Tarihi</th>
+                                <th style="padding: 8px; border-bottom: 2px solid #ddd;">Tutar</th>
+                            </tr>
+                        </thead>
+                        <tbody id="previewTbody"></tbody>
+                    </table>
+                </div>
+                <button class="btn btn-success" onclick="commitPreviewData()">✅ Onayla ve Aktar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="importExcelModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('importExcelModal')">&times;</span>
+            <h2>Eski Verileri İçeri Aktar</h2>
+            <p>Eski Excel sisteminizi birebir formatında içeri aktarabilirsiniz. Sütunlar: Zaman Damgası, Alım/Ödeme, Tedarikçi, Tutar, Tarih.</p>
+            <input type="file" id="excelFile" accept=".xlsx,.xls">
+            <button class="btn btn-primary" onclick="uploadExcel()" id="excelBtn">Excel Yükle</button>
+        </div>
+    </div>
+
+    <!-- Edit Transaction Modal -->
+    <div id="editTxModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('editTxModal')">&times;</span>
+            <h2>İşlemi Düzenle</h2>
+            <form id="editTxForm" onsubmit="submitEditTx(event)">
+                <input type="hidden" id="editTxId">
+                <label>İşlem Tipi:</label>
+                <select id="editTxType" class="input" required>
+                    <option value="Alım">Alım (Fatura)</option>
+                    <option value="Ödeme">Ödeme (Nakit Çıkışı)</option>
+                    <option value="İade">İade / İskonto</option>
+                </select>
+                <label>Tarih:</label>
+                <input type="date" id="editTxDate" class="input" required>
+                <label>Tutar (TL):</label>
+                <input type="number" step="0.01" id="editTxAmount" class="input" required>
+                <button type="submit" class="btn btn-primary" style="margin-top: 15px; width: 100%;">Kaydet</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
