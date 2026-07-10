@@ -17,13 +17,16 @@ async function sendCapiEvent(match) {
   }
 
   const url = `https://graph.facebook.com/v19.0/${pixelId}/events`;
-  const eventTime = Math.floor(new Date().getTime() / 1000);
+  const eventTime = match.eventTime ? match.eventTime : Math.floor(new Date().getTime() / 1000);
+  // Dedup icin event_id (ayni event tekrar yuklenirse Meta mukerrer saymaz)
+  const eventId = crypto.createHash('sha256').update(`${match.rep_id}_${eventTime}_purchase`).digest('hex');
 
   const payload = {
     data: [
       {
         event_name: "Purchase",
         event_time: eventTime,
+        event_id: eventId,
         action_source: "physical_store",
         user_data: {
           fbp: match.fbp,
@@ -57,7 +60,9 @@ async function sendCapiEvent(match) {
 
 async function processCapiBatch(matches) {
   // Sadece YENI_MUSTERI ve RETARGETING etiketli (dogrudan reklam temasli) olanlari CAPI'ye yolla
-  const eligibleMatches = matches.filter(m => m.type === 'YENI_MUSTERI' || m.type === 'RETARGETING');
+  // Meta'ya gonderilecekler: dogrudan reklam temasli (YENI/RETARGETING) + ortalama-imputasyonlu
+  // ad-ziyaretciler. HALO (arkadas etkisi) panelde gorunur ama Meta'ya gonderilmez (tiklama yok).
+  const eligibleMatches = matches.filter(m => m.type === 'YENI_MUSTERI' || m.type === 'RETARGETING' || m.type === 'IMPUTE_ORTALAMA');
 
   let successCount = 0;
   for (const match of eligibleMatches) {

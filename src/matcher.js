@@ -27,7 +27,7 @@ async function processPosUpload(buffer) {
     if (!userHistory[scan.rep_id]) {
       userHistory[scan.rep_id] = { scans: [], hasSeenAd: false, firstSeenAdAt: null };
     }
-    const isAd = !!(scan.fbclid || scan.utm_source === 'facebook' || scan.utm_source === 'ig');
+    const isAd = !!(scan.fbclid || ['meta','facebook','ig','instagram'].includes(scan.utm_source));
     userHistory[scan.rep_id].scans.push({ ...scan, isAd });
     if (isAd && !userHistory[scan.rep_id].hasSeenAd) {
       userHistory[scan.rep_id].hasSeenAd = true;
@@ -40,8 +40,13 @@ async function processPosUpload(buffer) {
     newCustomerRevenue: 0,
     haloRevenue: 0,
     retargetRevenue: 0,
+    imputedRevenue: 0,
+    imputedCount: 0,
+    avgPerCapita: 0,
     matches: []
   };
+  // Yuklenen adisyon dosyasinin kapsadigi zaman araligi (imputasyonu bu gune sabitlemek icin)
+  let minOpen = Infinity, maxOpen = -Infinity;
 
   // 3. Adisyon Satırlarını İşle
   for (const row of rows) {
@@ -59,6 +64,8 @@ async function processPosUpload(buffer) {
 
     // Eşleşen QR taramalarını bul (Açılış -5dk ile +10dk arası)
     const tOpen = openTime.getTime();
+    if (tOpen < minOpen) minOpen = tOpen;
+    if (tOpen > maxOpen) maxOpen = tOpen;
     const tableScans = allScans.filter(scan => {
       const scanMasa = (scan.masa || '').toLowerCase().trim();
       const posMasa = masaName.toLowerCase().trim();
@@ -74,7 +81,7 @@ async function processPosUpload(buffer) {
     for (const s of tableScans) {
       if (!seenIds.has(s.rep_id)) {
         seenIds.add(s.rep_id);
-        const isAd = !!(s.fbclid || s.utm_source === 'facebook' || s.utm_source === 'ig');
+        const isAd = !!(s.fbclid || ['meta','facebook','ig','instagram'].includes(s.utm_source));
         uniqueUsersAtTable.push({ rep_id: s.rep_id, isAdThisScan: isAd, timestamp: new Date(s.timestamp).getTime(), fbp: s.fbp, fbc: s.fbc });
       }
     }
@@ -133,6 +140,57 @@ async function processPosUpload(buffer) {
         label: label,
         fbp: u.fbp,
         fbc: u.fbc,
+        eventTime: Math.floor(tOpen / 1000),
+        capiSent: false
+      });
+    }
+  }
+
+  // ================= ORTALAMA IMPUTASYONU (Bugra onayli) =================
+  // Reklamdan gelip MASA QR okutan ("Restorana Gelme") ama adisyonu ESLESMEYEN ziyaretcilere,
+  // eslesen reklam-ziyaretcilerinin ORTALAMA kisi-basi degerini ata. Boylece kismi eslesmede
+  // ROAS gercekci olur. NOT: /menu (masasiz) goruntulemeleri = dukkana GELMEMIS -> HARIC.
+  const adAttributedMatches = results.matches.filter(m =>
+    m.type === 'YENI_MUSTERI' || m.type === 'RETARGETING' || m.type === 'HALO_EFFECT'
+  );
+  const avgPerCapita = adAttributedMatches.length > 0
+    ? Math.round(adAttributedMatches.reduce((sum, m) => sum + m.perCapita, 0) / adAttributedMatches.length)
+    : 0;
+  results.avgPerCapita = avgPerCapita;
+
+  const matchedRepIds = new Set(results.matches.map(m => m.rep_id));
+  // Dosyanin kapsadigi gun(ler): acilislarin -1saat / +5saat penceresi (servis gunu)
+  const lo = (minOpen === Infinity) ? -Infinity : (minOpen - 3600000);
+  const hi = (maxOpen === -Infinity) ? Infinity : (maxOpen + 5 * 3600000);
+
+  if (avgPerCapita > 0) {
+    const imputedVisits = {}; // rep_id -> ilk uygun ad-masa taramasi (kisi basi tek Purchase)
+    for (const scan of allScans) {
+      const masa = (scan.masa || '').trim();
+      if (!masa) continue;                       // masasiz /menu = gelmemis -> haric
+      if (matchedRepIds.has(scan.rep_id)) continue; // zaten gercek degerle eslesti
+      const hist = userHistory[scan.rep_id];
+      if (!hist || !hist.hasSeenAd) continue;    // reklam gecmisi yoksa organik -> haric
+      const t = new Date(scan.timestamp).getTime();
+      if (t < lo || t > hi) continue;            // yuklenen gunun disindaysa atla
+      if (!imputedVisits[scan.rep_id]) imputedVisits[scan.rep_id] = scan;
+    }
+    for (const rep_id in imputedVisits) {
+      const scan = imputedVisits[rep_id];
+      results.imputedRevenue += avgPerCapita;
+      results.totalAdRevenue += avgPerCapita;
+      results.imputedCount++;
+      results.matches.push({
+        rep_id: rep_id,
+        masa: scan.masa,
+        time: new Date(scan.timestamp).toISOString(),
+        total: avgPerCapita,
+        perCapita: avgPerCapita,
+        type: 'IMPUTE_ORTALAMA',
+        label: 'Reklamdan Geldi, Adisyon Eslesmedi (Ortalama Deger)',
+        fbp: scan.fbp,
+        fbc: scan.fbc,
+        eventTime: Math.floor(new Date(scan.timestamp).getTime() / 1000),
         capiSent: false
       });
     }
