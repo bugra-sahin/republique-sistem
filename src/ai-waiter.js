@@ -99,15 +99,16 @@ async function chatWithWaiter({ message, repId, ip, history }) {
     return { reply: 'Cok hizli yaziyorsunuz, birazdan tekrar deneyin lutfen.', ok: true };
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
+  const geminiKey = process.env.GEMINI_API_KEY;
+  const anthropicKey = process.env.ANTHROPIC_API_KEY;
+  if (!geminiKey && !anthropicKey) {
     return { reply: 'Republique AI su an hazirlaniyor, birazdan yaninizda olacak. Bu arada garsonumuz size yardimci olabilir. 🍸', ok: true, disabled: true };
   }
 
   const menuText = flattenMenu(getCachedMenu());
   const system = buildSystemPrompt(menuText, process.env.LLM_WEEKLY_FOCUS || '');
 
-  // Sohbet gecmisi (son 6 mesaj), rol bazli
+  // Sohbet gecmisi (son 6 mesaj)
   const msgs = [];
   if (Array.isArray(history)) {
     for (const h of history.slice(-6)) {
@@ -119,31 +120,40 @@ async function chatWithWaiter({ message, repId, ip, history }) {
   msgs.push({ role: 'user', content: message });
 
   try {
-    const resp = await axios.post('https://api.anthropic.com/v1/messages', {
-      model: MODEL,
-      max_tokens: 400,
-      system,
-      messages: msgs
-    }, {
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json'
-      },
-      timeout: 20000
-    });
-    let text = '';
-    if (resp.data && Array.isArray(resp.data.content)) {
-      text = resp.data.content.map(c => c.text || '').join('').trim();
-    }
+    // Saglayici: GEMINI (ucretsiz kota) oncelikli, yoksa ANTHROPIC (Claude)
+    let text = geminiKey
+      ? await callGemini(system, msgs, geminiKey)
+      : await callAnthropic(system, msgs, anthropicKey);
     if (!text) text = 'Bunu tam anlayamadim, menuyle ilgili baska nasil yardimci olabilirim?';
-    // Cikti uzunluk emniyeti
     if (text.length > 1500) text = text.slice(0, 1500);
     return { reply: text, ok: true };
   } catch (e) {
-    console.error('AI garson hatasi:', e.response ? JSON.stringify(e.response.data).slice(0, 300) : e.message);
+    console.error('AI garson hatasi:', e.response ? JSON.stringify(e.response.data).slice(0, 400) : e.message);
     return { reply: 'Su an kucuk bir aksaklik yasadim, birazdan tekrar dener misiniz? Dilerseniz garsonumuz da yardimci olur.', ok: false };
   }
+}
+
+// ANTHROPIC (Claude) cagrisi
+async function callAnthropic(system, msgs, apiKey) {
+  const resp = await axios.post('https://api.anthropic.com/v1/messages', {
+    model: MODEL, max_tokens: 400, system, messages: msgs
+  }, { headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' }, timeout: 20000 });
+  if (resp.data && Array.isArray(resp.data.content)) return resp.data.content.map(c => c.text || '').join('').trim();
+  return '';
+}
+
+// GEMINI (Google AI Studio, ucretsiz kota) cagrisi
+async function callGemini(system, msgs, apiKey) {
+  const model = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+  const contents = msgs.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }));
+  const resp = await axios.post(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+    { system_instruction: { parts: [{ text: system }] }, contents, generationConfig: { maxOutputTokens: 500, temperature: 0.7 } },
+    { headers: { 'content-type': 'application/json' }, timeout: 20000 }
+  );
+  const cand = resp.data && resp.data.candidates && resp.data.candidates[0];
+  if (cand && cand.content && Array.isArray(cand.content.parts)) return cand.content.parts.map(p => p.text || '').join('').trim();
+  return '';
 }
 
 module.exports = { chatWithWaiter, flattenMenu };
