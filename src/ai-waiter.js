@@ -69,7 +69,7 @@ function flattenMenu(menu) {
     }
   }
   const text = lines.join('\n');
-  return text.length > 12000 ? text.slice(0, 12000) + '\n...(devami var)' : text;
+  return text.length > 80000 ? text.slice(0, 80000) + '\n...(devami var)' : text;
 }
 
 function buildSystemPrompt(menuText, focus) {
