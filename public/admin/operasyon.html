@@ -7,6 +7,33 @@
   <link rel="stylesheet" href="/admin/css/admin.css">
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,600;1,600&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+  <style>
+    /* Ads Sub-Tabs */
+    .ads-sub-tabs { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; }
+    .ads-sub-tab-btn { background: transparent; border: none; color: var(--text-secondary); cursor: pointer; padding: 5px 10px; font-weight: 500; transition: 0.3s; }
+    .ads-sub-tab-btn.active { color: var(--accent-purple); border-bottom: 2px solid var(--accent-purple); }
+    .ads-sub-content { display: none; }
+    .ads-sub-content.active { display: block; }
+    
+    /* Accordion Table */
+    .table-accordion th { background: rgba(0,0,0,0.3); }
+    .row-campaign { background: rgba(255,255,255,0.05); font-weight: bold; cursor: pointer; }
+    .row-adset { background: rgba(255,255,255,0.02); display: none; cursor: pointer; }
+    .row-ad { display: none; font-size: 0.9em; color: #ddd; }
+    
+    .badge { padding: 3px 6px; border-radius: 4px; font-size: 0.8em; font-weight: bold; }
+    .badge-active { background: rgba(76, 175, 80, 0.2); color: #4CAF50; }
+    .badge-paused { background: rgba(158, 158, 158, 0.2); color: #9E9E9E; }
+    .badge-pending { background: rgba(255, 193, 7, 0.2); color: #FFC107; }
+
+    .suggestion-card { border-left: 4px solid var(--accent-purple); background: rgba(255,255,255,0.05); padding: 15px; margin-bottom: 10px; border-radius: 4px; }
+    .suggestion-title { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-weight: bold; }
+    
+    .ig-media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; }
+    .ig-card { background: rgba(255,255,255,0.05); border-radius: 8px; overflow: hidden; text-align: center; padding-bottom: 10px; }
+    .ig-card img, .ig-card video { width: 100%; height: 200px; object-fit: cover; }
+    .ig-card p { padding: 10px; font-size: 0.9em; color: var(--text-secondary); text-align: left; }
+  </style>
 </head>
 <body>
   <div class="bg-gradient"></div>
@@ -16,7 +43,8 @@
     <div class="nav-tabs">
       <button class="tab-btn active" data-tab="tab-live">Canlı Akış</button>
       <button class="tab-btn" data-tab="tab-upload">Adisyon Yükle</button>
-      <button class="tab-btn" data-tab="tab-reports">Günün Özeti</button>
+      <button class="tab-btn" data-tab="tab-reports">Raporlar</button>
+      <button class="tab-btn" data-tab="tab-ads" style="color: var(--accent-purple); font-weight: bold;">Ads Manager (AI)</button>
     </div>
   </nav>
 
@@ -25,7 +53,15 @@
     <!-- Sekme 1: Canlı Akış -->
     <div id="tab-live" class="tab-content active">
       <div class="glass-card">
-        <h2>Canlı QR Okutma Akışı</h2>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+          <h2>Canlı QR Okutma Akışı</h2>
+          <select id="liveScanFilter" class="filter-select" style="padding: 5px 10px; background: rgba(0,0,0,0.5); color: white; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px;">
+            <option value="today">Bugün (09:00 - 03:00)</option>
+            <option value="1h">Son 1 Saat</option>
+            <option value="4h">Son 4 Saat</option>
+            <option value="all">Tüm Zamanlar</option>
+          </select>
+        </div>
         <div class="table-wrapper">
           <table id="liveScansTable">
             <thead>
@@ -69,9 +105,19 @@
       </div>
     </div>
 
-    <!-- Sekme 3: Günün Özeti (Rapor) -->
+    <!-- Sekme 3: Raporlar -->
     <div id="tab-reports" class="tab-content">
       
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h2 style="margin: 0;">Raporlar</h2>
+        <div style="display: flex; gap: 10px; align-items: center;">
+          <input type="date" id="reportsStartDate" class="filter-date" onclick="this.showPicker()" style="padding: 5px 10px; background: rgba(0,0,0,0.5); color: white; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px;">
+          <span>-</span>
+          <input type="date" id="reportsEndDate" class="filter-date" onclick="this.showPicker()" style="padding: 5px 10px; background: rgba(0,0,0,0.5); color: white; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px;">
+          <button id="btnFilterReports" class="btn-primary" style="padding: 5px 15px; font-size: 0.9em; margin-top: 0;">Uygula</button>
+        </div>
+      </div>
+
       <div class="dashboard-grid">
         <div class="stat-card highlight">
           <span class="stat-title">Reklamdan Gelen Toplam Ciro</span>
@@ -119,6 +165,180 @@
       </div>
 
     </div>
+
+    <!-- Sekme 4: Reklam Yönetimi (AI) -->
+    <div id="tab-ads" class="tab-content">
+      
+      <div class="ads-sub-tabs">
+        <button class="ads-sub-tab-btn active" data-sub="sub-active-ads">Aktif Kampanyalar</button>
+        <button class="ads-sub-tab-btn" data-sub="sub-ai-suggestions">AI Önerileri <span id="aiBadge" class="badge badge-pending" style="display:none; margin-left:5px;">0</span></button>
+        <button class="ads-sub-tab-btn" data-sub="sub-ig-drafts">IG Medya & Taslaklar</button>
+        <button class="ads-sub-tab-btn" data-sub="sub-audiences">Hedef Kitleler</button>
+        <button class="ads-sub-tab-btn" data-sub="sub-old-ads">Reklam 1 TL Analizi</button>
+      </div>
+
+      <!-- Alt Sekme 1: Aktif Reklamlar -->
+      <div id="sub-active-ads" class="ads-sub-content active">
+        <div class="glass-card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+            <div>
+              <h2 style="margin:0;">Hiyerarşik Görünüm (Reklam 2 TL)</h2>
+              <p style="color:var(--text-secondary); margin-top:5px; margin-bottom:0;">Kampanyaya tıklayarak Setleri, Sete tıklayarak Reklamları görebilirsiniz.</p>
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center;">
+              <input type="date" id="adsStartDate" class="filter-date" onclick="this.showPicker()" style="padding: 5px; background: rgba(0,0,0,0.5); color: white; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px;">
+              <span>-</span>
+              <input type="date" id="adsEndDate" class="filter-date" onclick="this.showPicker()" style="padding: 5px; background: rgba(0,0,0,0.5); color: white; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px;">
+              <button id="btnFilterAds" class="btn-primary" style="padding: 5px 15px; font-size: 0.9em; margin-top: 0;">Uygula</button>
+            </div>
+          </div>
+          <div class="table-wrapper">
+            <table class="table-accordion" id="adsHierarchyTable">
+              <thead>
+                <tr>
+                  <th>İsim</th>
+                  <th>Durum</th>
+                  <th>Harcama</th>
+                  <th>Gösterim</th>
+                  <th>Hook Rate (3sn)</th>
+                  <th>Dönüşüm (CAPI)</th>
+                  <th>CPA (Maliyet)</th>
+                  <th>ROAS</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td colspan="8" style="text-align:center; color: var(--text-secondary);">Veriler yükleniyor...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Alt Sekme 2: AI Önerileri -->
+      <div id="sub-ai-suggestions" class="ads-sub-content">
+        <div class="glass-card">
+          <h2>Yapay Zeka Danışmanı</h2>
+          <p style="color:var(--text-secondary); margin-bottom:15px;">AI sistemi metrikleri analiz eder ancak kararı her zaman SİZE bırakır. Bütçe artırımlarını ve durdurmaları buradan onaylayabilirsiniz.</p>
+          <div id="suggestionsContainer">
+            <p style="text-align:center; color: var(--text-secondary);">Öneriler analiz ediliyor...</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Alt Sekme 3: IG Medya & Taslaklar -->
+      <div id="sub-ig-drafts" class="ads-sub-content">
+        <div class="glass-card">
+          <h2>Instagram Post & Reels</h2>
+          <p style="color:var(--text-secondary); margin-bottom:15px;">Buradan seçtiğiniz içerikleri "Tüm Kitlelerde" taslak olarak test kampanyasına ekleyebilirsiniz.</p>
+          <div id="igMediaContainer" class="ig-media-grid">
+            <p style="grid-column: 1/-1; text-align:center; color: var(--text-secondary);">Medya yükleniyor (Instagram yetkisi gerekebilir)...</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Alt Sekme 4: Hedef Kitleler -->
+      <div id="sub-audiences" class="ads-sub-content">
+        <div class="glass-card">
+          <h2>Hedef Kitle Havuzu (Audiences)</h2>
+          <p style="color:var(--text-secondary); margin-bottom:15px;">Aşağıda sistem tarafından oluşturulmuş ve Meta Ads üzerinde etiketlenmiş hedef kitleleri görüyorsunuz.</p>
+          
+          <!-- AI Builder UI -->
+          <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+            <h3 style="margin-bottom: 10px; font-size: 1.1em; color: var(--accent-blue);"><span class="material-icons-round" style="vertical-align: middle; font-size: 1.2em;">auto_awesome</span> AI Kitle Oluşturucu</h3>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+              <input type="text" id="aiAudiencePrompt" placeholder="Örn: Gece 22:00'dan sonra gelip QR okutanlardan kitle yap ve %1 benzerini oluştur." style="flex: 1; min-width: 250px; padding: 10px; background: rgba(0,0,0,0.5); color: white; border: 1px solid var(--border-color); border-radius: 4px; font-family: inherit;">
+              <button id="btnBuildAudience" class="btn-primary" style="margin-top: 0; padding: 10px 20px;">Oluştur</button>
+            </div>
+            <div id="aiAudienceStatus" style="margin-top: 10px; display: none; font-size: 0.9em;"></div>
+          </div>
+
+          <div class="table-wrapper">
+            <table id="audiencesTable">
+              <thead>
+                <tr>
+                  <th>Kitle Adı</th>
+                  <th>Kitle Türü</th>
+                  <th>Büyüklük</th>
+                  <th>Kullanıldığı Setler</th>
+                  <th>Etiket/Durum</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Mock veriler admin.js tarafından doldurulacak -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Alt Sekme 5: Eski Hesap Analizi -->
+      <div id="sub-old-ads" class="ads-sub-content">
+        <div class="glass-card">
+          <h2>Reklam 1 TL Analizi (Ortaklık & Geçmiş)</h2>
+          <div class="table-wrapper">
+            <table id="oldAdsHierarchyTable">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Hesap / Kampanya / Set / Reklam</th>
+                  <th>Harcama</th>
+                  <th>Dönüşüm (Satın Alma)</th>
+                  <th>Tıklama</th>
+                  <th>İzlenme (3s+)</th>
+                  <th>CPA (Maliyet/Dönüşüm)</th>
+                  <th>ROAS</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td colspan="8" style="text-align:center; color: var(--text-secondary);">Eski veriler yükleniyor...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- AI Önerileri (Sıralı Modal & Listeleme) -->
+      <div id="sub-ai-suggestions" class="ads-sub-content">
+        <div class="glass-card">
+          <h2><span class="material-icons-round" style="vertical-align:middle; color:var(--accent-gold);">psychology</span> Yapay Zeka Test ve Ölçekleme Önerileri</h2>
+          <p style="color:var(--text-secondary);">Test kampanyalarındaki başarı durumlarına göre yapay zeka tarafından sunulan bütçe artırma ve ölçekleme tavsiyeleri.</p>
+          <div id="aiSuggestionsList" style="margin-top:20px; display:flex; flex-direction:column; gap:15px;">
+            <!-- Öneriler admin.js tarafından buraya basılacak -->
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- IG Medya Reklam Oluşturma Modalı -->
+    <div id="igAdModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:9999; justify-content:center; align-items:center;">
+      <div style="background:var(--bg-dark); border:1px solid var(--accent-gold); border-radius:12px; width:90%; max-width:500px; padding:25px;">
+        <h2 style="color:var(--accent-gold); margin-top:0;">Bu Gönderi İçin Reklam Oluştur</h2>
+        <p id="igModalMediaIdText" style="color:var(--text-secondary); font-size:0.9em; margin-bottom:20px;"></p>
+        
+        <div style="margin-bottom: 20px; background:rgba(212, 175, 55, 0.1); border:1px solid var(--accent-gold); padding:15px; border-radius:8px;">
+          <h3 style="margin-top:0; color:var(--text-primary);"><span class="material-icons-round" style="vertical-align:middle;">science</span> Otonom AI Testine Sok</h3>
+          <p style="font-size:0.9em; color:var(--text-secondary);">Yapay zeka bu gönderiyi alıp otomatik olarak Retargeting, Lookalike ve Geniş kitlelerde düşük bütçeyle teste sokar. Sonuçları "AI Önerileri" sekmesine düşürür.</p>
+          <button id="btnAiTest" class="btn-primary" style="width:100%; margin-top:10px; background:var(--accent-purple); border-color:var(--accent-purple);">Sisteme Devret (AI Test)</button>
+        </div>
+
+        <div style="margin-bottom: 20px; border:1px solid var(--border-color); padding:15px; border-radius:8px;">
+          <h3 style="margin-top:0; color:var(--text-primary);"><span class="material-icons-round" style="vertical-align:middle;">tune</span> Manuel Reklam (Duraklatılmış)</h3>
+          <label style="display:block; margin-bottom:5px; color:var(--text-secondary);">Günlük Bütçe</label>
+          <input type="number" id="manualBudget" value="100" style="width:100%; padding:10px; margin-bottom:10px; background:rgba(0,0,0,0.5); border:1px solid var(--border-color); color:white; border-radius:4px;">
+          <button id="btnManualAd" class="btn-primary" style="width:100%; margin-top:10px; background:transparent; border:1px solid var(--accent-gold); color:var(--accent-gold);">Manuel Taslak Oluştur</button>
+        </div>
+
+        <div style="text-align:right;">
+          <button onclick="document.getElementById('igAdModal').style.display='none'" style="background:transparent; color:white; border:none; cursor:pointer; padding:10px;">İptal</button>
+        </div>
+      </div>
+    </div>
+
   </main>
 
   <script src="/admin/js/admin.js"></script>
