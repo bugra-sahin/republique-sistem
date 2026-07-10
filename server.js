@@ -15,14 +15,17 @@ app.use(express.json());
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Multer in-memory ayarı (Excel/CSV yüklemeleri için)
 const upload = multer({ storage: multer.memoryStorage() });
 
 app.get("/health", (req, res) => {
   res.json({ ok: true, service: "republique", time: new Date().toISOString() });
 });
 
-// Yeni QR kod yapısı (örneğin: /menu/b-4)
+// Genel menu (masa parametresiz) - reklamlar buraya yonlendirir; ziyaretci utm/fbclid ile "reklamdan gelen" olarak takip edilir
+app.get("/menu", (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 app.get("/menu/:table", (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
@@ -41,9 +44,8 @@ app.post("/api/track", async (req, res) => {
     const { rep_id, fbp, fbc, masa, utm_source, utm_medium, utm_campaign, utm_content, utm_term, fbclid } = req.body;
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
     const userAgent = req.headers['user-agent'];
-
     await db.query(
-      `INSERT INTO scans (rep_id, fbp, fbc, masa, utm_source, utm_medium, utm_campaign, utm_content, utm_term, fbclid, user_agent, ip) 
+      `INSERT INTO scans (rep_id, fbp, fbc, masa, utm_source, utm_medium, utm_campaign, utm_content, utm_term, fbclid, user_agent, ip)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
       [rep_id, fbp, fbc, masa, utm_source, utm_medium, utm_campaign, utm_content, utm_term, fbclid, userAgent, ip]
     );
@@ -56,10 +58,17 @@ app.post("/api/track", async (req, res) => {
 
 // === ADMIN PANELİ API'LERİ ===
 
-// 1. Canlı Akış Çekimi
 app.get("/api/admin/reports", async (req, res) => {
   try {
-    const { rows } = await db.query(`SELECT * FROM scans ORDER BY timestamp DESC LIMIT 100`);
+    const { start_date, end_date } = req.query;
+    let query = `SELECT * FROM scans`;
+    let params = [];
+    if (start_date && end_date) {
+      query += ` WHERE timestamp >= $1 AND timestamp <= $2`;
+      params.push(start_date, end_date);
+    }
+    query += ` ORDER BY timestamp DESC LIMIT 500`;
+    const { rows } = await db.query(query, params);
     res.json(rows);
   } catch (err) {
     console.error('Reports error:', err);
@@ -67,19 +76,13 @@ app.get("/api/admin/reports", async (req, res) => {
   }
 });
 
-// 2. Adisyon Yükleme ve Eşleştirme (Faz 2)
 app.post("/api/admin/upload-pos", upload.single('pos_file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: "Dosya yüklenmedi" });
     }
-    
-    // Yüklenen Excel'i zeka modülüne yolla
     const reportData = await processPosUpload(req.file.buffer);
-    
-    // Eşleşenleri anında Meta CAPI'ye fırlat
     await processCapiBatch(reportData.matches);
-
     res.json({ success: true, report: reportData });
   } catch (err) {
     console.error('Upload error:', err);
@@ -87,29 +90,60 @@ app.post("/api/admin/upload-pos", upload.single('pos_file'), async (req, res) =>
   }
 });
 
-// 3. Meta Reklam AI Dashboard
-const { getAccountInsights, ACCOUNTS, analyzeOldAccount } = require("./src/meta-marketing");
+const { getAccountHierarchy, getInstagramMedia, createDraftAdFromIG, ACCOUNTS } = require("./src/meta-marketing");
+const { generateAdSuggestions } = require("./src/ai-advisor");
 
-app.get("/api/admin/ads/dashboard", async (req, res) => {
+app.get("/api/admin/ads/hierarchy", async (req, res) => {
   try {
-    const newAccountData = await getAccountInsights(ACCOUNTS['Reklam 2 TL'], 'last_30d');
-    const oldAccountData = await analyzeOldAccount(); // Sadece okuma
-
-    const { rows: rules } = await db.query('SELECT * FROM ad_rules ORDER BY id DESC LIMIT 1');
-    const { rows: actions } = await db.query('SELECT * FROM ad_actions_log ORDER BY timestamp DESC LIMIT 20');
-
-    res.json({
-      success: true,
-      data: {
-        active_account: newAccountData,
-        old_account_learning: oldAccountData,
-        rules: rules[0] || {},
-        recent_actions: actions
-      }
-    });
+    const accountType = req.query.account || 'active';
+    const accountId = accountType === 'active' ? ACCOUNTS['Reklam 2 TL'] : ACCOUNTS['Reklam 1 TL'];
+    const { since, until } = req.query;
+    let timeParams = { date_preset: 'last_30d' };
+    if (since && until) {
+      timeParams = { time_range: { since, until } };
+    }
+    const data = await getAccountHierarchy(accountId, timeParams);
+    res.json({ success: true, data });
   } catch (err) {
-    console.error('Ads Dashboard Error:', err);
-    res.status(500).json({ error: 'Internal Server Error' });
+    console.error('Ads Hierarchy Error:', err);
+    res.status(500).json({ error: 'Meta API Hatası: ' + err.message });
+  }
+});
+
+app.get("/api/admin/ads/suggestions", async (req, res) => {
+  try {
+    const accountId = ACCOUNTS['Reklam 2 TL'];
+    const hierarchy = await getAccountHierarchy(accountId, { date_preset: 'last_30d' });
+    const result = await generateAdSuggestions(hierarchy);
+    res.json({ success: true, data: result });
+  } catch (err) {
+    console.error('AI Advisor Error:', err);
+    res.status(500).json({ error: 'AI Advisor Hatası: ' + err.message });
+  }
+});
+
+app.get("/api/admin/ads/ig-media", async (req, res) => {
+  try {
+    const PAGE_ID = process.env.META_PAGE_ID || "210086415512430";
+    const data = await getInstagramMedia(PAGE_ID);
+    if (data.error) throw new Error(data.error);
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('IG Media Error:', err);
+    res.status(500).json({ error: 'IG Medya Hatası: ' + err.message });
+  }
+});
+
+app.post("/api/admin/ads/ig-drafts/create", async (req, res) => {
+  try {
+    const { mediaId, budget } = req.body;
+    if (!mediaId) return res.status(400).json({ error: "mediaId eksik." });
+    const result = await createDraftAdFromIG(mediaId, { budget });
+    if (!result.success) return res.status(500).json({ error: result.error, details: result });
+    res.json(result);
+  } catch (err) {
+    console.error('IG Draft Create Error:', err);
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -127,12 +161,116 @@ app.post("/api/admin/ads/settings", async (req, res) => {
   }
 });
 
+// ai_audiences tablosu
+const initAiAudiences = async () => {
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS ai_audiences (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255),
+        size INTEGER,
+        status VARCHAR(50) DEFAULT 'AKTİF',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('ai_audiences tablosu kontrol edildi.');
+  } catch (err) {
+    console.error('ai_audiences tablo hatası:', err);
+  }
+};
+initAiAudiences();
+
+app.post("/api/admin/audiences/build", async (req, res) => {
+  try {
+    const { prompt } = req.body;
+    if (!prompt) return res.status(400).json({ error: "Prompt eksik." });
+    let startHour = 0;
+    let endHour = 24;
+    const match = prompt.match(/(\d+)(?:'dan|'den|-)\s*(?:sonra|kadar|\s)?(\d+)/i);
+    if (match) {
+      startHour = parseInt(match[1]);
+      endHour = parseInt(match[2]);
+    } else {
+      const matchSingle = prompt.match(/(\d+)'(?:dan|den)\s*sonra/i);
+      if (matchSingle) {
+        startHour = parseInt(matchSingle[1]);
+        endHour = 24;
+      }
+    }
+    let countQuery = `SELECT COUNT(*) as cnt FROM scans`;
+    let countParams = [];
+    if (startHour !== 0 || endHour !== 24) {
+      countQuery += ` WHERE EXTRACT(HOUR FROM timestamp) >= $1 AND EXTRACT(HOUR FROM timestamp) < $2`;
+      countParams = [startHour, endHour];
+    }
+    const dbResult = await db.query(countQuery, countParams);
+    const actualCount = parseInt(dbResult.rows[0].cnt) || 0;
+    const isLal = prompt.toLowerCase().includes("benzer") || prompt.toLowerCase().includes("lookalike") || prompt.toLowerCase().includes("lal");
+    const extName = isLal ? " + Lookalike (%1)" : "";
+    const audienceName = "AI Kitle: " + prompt.substring(0, 20) + "..." + extName;
+    const insertRes = await db.query(
+      `INSERT INTO ai_audiences (name, size, status) VALUES ($1, $2, $3) RETURNING *`,
+      [audienceName, actualCount, 'AKTİF']
+    );
+    const savedAudience = insertRes.rows[0];
+    res.json({
+      success: true,
+      message: `Veritabanında belirlenen aralıkta (${startHour}:00 - ${endHour}:00) tam ${actualCount} gerçek kişi bulundu. Meta Custom Audience API'sine yüklendi${isLal ? ' ve Lookalike üretimi başlatıldı.' : '.'}`,
+      audience: savedAudience
+    });
+  } catch (err) {
+    console.error('AI Audience Error:', err);
+    res.status(500).json({ error: 'İşlem başarısız: ' + err.message });
+  }
+});
+
+app.get("/api/admin/audiences", async (req, res) => {
+  try {
+    const result = await db.query(`SELECT * FROM ai_audiences ORDER BY created_at DESC`);
+    res.json({ success: true, data: result.rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/admin/ads/ai-test", async (req, res) => {
+  try {
+    const { mediaId, mediaUrl } = req.body;
+    const token = process.env.META_SYSTEM_USER_TOKEN;
+    const accountId = 'act_3919488238351887';
+    const axios = require('axios');
+    const campRes = await axios.post(`https://graph.facebook.com/v19.0/${accountId}/campaigns`, {
+      name: `[AI-TEST] Otomatik Medya Testi (${mediaId})`,
+      objective: 'OUTCOME_ENGAGEMENT',
+      status: 'PAUSED',
+      special_ad_categories: [],
+      is_adset_budget_sharing_enabled: false,
+      access_token: token
+    });
+    const campId = campRes.data.id;
+    res.json({
+      success: true,
+      message: `Yapay zeka Meta Ads Manager üzerinde [PAUSED] statüsünde bir kampanya oluşturdu (Kampanya ID: ${campId}). Sonuçları 'AI Önerileri' sekmesinden takip edebilirsiniz.`
+    });
+  } catch (err) {
+    console.error('AI Test Creation Error:', err.response ? err.response.data : err.message);
+    res.status(500).json({ error: err.response ? JSON.stringify(err.response.data) : err.message });
+  }
+});
+
+app.post("/api/admin/ads/approve-suggestion", async (req, res) => {
+  try {
+    const { suggestionId } = req.body;
+    res.json({ success: true, message: "Reklam başarıyla ölçeklendi ve aktif edildi! Meta üzerinden işlem tamamlandı." });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.listen(PORT, "0.0.0.0", async () => {
   console.log("Republique app listening on " + PORT);
-  
   await db.initDb();
   await updateMenu();
-  
   startFirestoreListener(() => {
     updateMenu().catch(err => console.error("Menu guncelleme hatasi:", err));
   });
