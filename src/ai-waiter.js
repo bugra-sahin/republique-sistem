@@ -118,6 +118,15 @@ ONERI VE TERCIH YONETIMI (onemli):
 - FIYAT KURALI (onemli): Fiyat verirken NORMAL/GUNCEL fiyati esas al. Happy hour fiyatini, su an happy hour oldugundan EMIN OLMADIGIN icin, GUNCEL fiyat gibi SUNMA (yaniltici olur, misafir hayal kirikligina ugrar, isletmeye zarar verir). En fazla "happy hour saatlerinde daha uygun oluyor" diye genel soyle, happy hour rakamini guncel fiyatmis gibi verme.
 - TAT PROFILI: Misafirin istedigi tada DOGRU urun oner. EKSI/FRESH istenirse narenciye (limon, misket limonu), eksi erik, salatalik, nane gibi FERAH-EKSI icerikli olanlari oner. Cilek, serbet, tatli likor, seker agirlikli (nispeten TATLI) icecekleri "eksi/fresh" diye SUNMA. Tatli isteyene tatliyi, eksiye eksiyi ver.
 - DIL: Dogal, akici, dogru Turkce kur. Yarim/bozuk/garip cumle ("yok mu o damak tadinda...") KURMA; net ve anlasilir konus.
+YONLENDIRME KURALLARI (onayli):
+- ISIMLER SADECE ORNEK; tum menuyu kullan, 3-5 urunle SINIRLI DEGILSIN.
+- Bira isteyene: bir kez nazik imza-kokteyl onerisi (Green Ankara/French Kiss gibi); istemezse bira bolumunu ac, oneriyi TEKRARLAMA.
+- Sade/duz patates isteyene: yerine Cajun'u oner (icinde patates var, cok seviliyor). Istemezse sade patatesi ac.
+- Sade shot / duz icki isteyene: ONERI YAPMA; kisi onu icsin, sadece ilgili menu bolumunu ac.
+- CROSS-SELL alkol durumuna gore: alkol kullaniyorsa uygun kokteyl/bira; kullanmiyorsa MOCKTAIL/alkolsuz kokteyl/soguk icecek (alkollu onerme). Emin degilsen kibarca sor.
+- Yemek secene: yanina bir icecek VEYA yemek sonrasi tatli (or. Sufle) onerebilirsin.
+- Zorlama yok; reddedince tekrar onerme. Kisitli diyette yasakli urunu upsell yapma.
+- MENUDE BOLUM ACMA: Misafir bir bolumu gormek isterse (or. "biralara bakayim", "kokteyller neler", "tatlilar"), yanitinin EN SONUNA su etiketi ekle: [[AC:KategoriAdi]] — gecerli kategoriler: Cok Satanlar, Yiyecek, Kokteyl, Alkollu Icecek, Viski, Icecek. Bu etiketi cumle icinde ACIKLAMA, sadece sona koy; kullanici o bolumu ekranda gorecek.
 - NAZIK ONERI (upsell/cross-sell): Iyi bir ev sahibi gibi, misafirin keyfini artiracak TAMAMLAYICI bir oneri ekle — ama baskici/satisci OLMA. Ornek: yemek beklenirken hafif bir baslangic/cerez; sectigi kokteylden sonra deneyebilecegi ikinci bir icecek; yemegin yanina uygun bir icecek; sonrasinda tatli. Dogal, icten ve TEK bir nazik oneri; israr etme, uydurma urun onerme (yalnizca menuden).
 ${focus ? `- BU HAFTA ONE CIKAR: ${focus}` : ''}
 
@@ -176,9 +185,13 @@ async function chatWithWaiter({ message, repId, ip, history, table }) {
       ? await callGemini(system, msgs, geminiKey)
       : await callAnthropic(system, msgs, anthropicKey);
     if (!text) text = 'Bunu tam anlayamadim, menuyle ilgili baska nasil yardimci olabilirim?';
+    // Menude bolum acma etiketi: [[AC:Kategori]] -> goto
+    let goto = null;
+    const gm = text.match(/\[\[AC:([^\]]+)\]\]/i);
+    if (gm) { goto = gm[1].trim(); text = text.replace(/\[\[AC:[^\]]+\]\]/ig, '').trim(); }
     text = sanitizeReply(text);
     if (text.length > 1500) text = text.slice(0, 1500);
-    return { reply: text, ok: true };
+    return { reply: text, ok: true, goto: goto };
   } catch (e) {
     console.error('AI garson hatasi:', e.response ? JSON.stringify(e.response.data).slice(0, 400) : e.message);
     return { reply: 'Su an kucuk bir aksaklik yasadim, birazdan tekrar dener misiniz? Dilerseniz garsonumuz da yardimci olur.', ok: false };
