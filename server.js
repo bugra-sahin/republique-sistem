@@ -136,9 +136,9 @@ app.get("/api/admin/ads/ig-media", async (req, res) => {
 
 app.post("/api/admin/ads/ig-drafts/create", async (req, res) => {
   try {
-    const { mediaId, budget } = req.body;
+    const { mediaId, budget, cta } = req.body;
     if (!mediaId) return res.status(400).json({ error: "mediaId eksik." });
-    const result = await createDraftAdFromIG(mediaId, { budget });
+    const result = await createDraftAdFromIG(mediaId, { budget, cta });
     if (!result.success) return res.status(500).json({ error: result.error, details: result });
     res.json(result);
   } catch (err) {
