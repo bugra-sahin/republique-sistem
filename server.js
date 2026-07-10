@@ -43,11 +43,19 @@ app.get("/health", (req, res) => {
 });
 
 // Genel menu (masa parametresiz) - reklamlar buraya yonlendirir; ziyaretci utm/fbclid ile "reklamdan gelen" olarak takip edilir
+// Kanonik masa seti (PionPOS ile birebir): gecersiz masa URL'si sade /menu'ya yonlendirilir
+const VALID_TABLES = new Set();
+[[1,11,'B'],[17,20,'B'],[1,5,'ORTA'],[1,10,'BISTRO'],[1,14,'D'],[1,15,'S']].forEach(function(r){
+  for (var i=r[0]; i<=r[1]; i++) VALID_TABLES.add(r[2]+'-'+i);
+});
+
 app.get("/menu", (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.get("/menu/:table", (req, res) => {
+  const _t = String(req.params.table || "").toUpperCase().trim();
+  if (!VALID_TABLES.has(_t)) return res.redirect("/menu");
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
