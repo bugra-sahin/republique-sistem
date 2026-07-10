@@ -92,7 +92,7 @@ async function createDraftAdFromIG(mediaId, options = {}) {
       object_id: PAGE_ID,
       instagram_user_id: igUserId,
       source_instagram_media_id: mediaId,
-      call_to_action: JSON.stringify({ type: 'VIEW_MENU', value: { link: MENU_URL } }),
+      call_to_action: JSON.stringify({ type: 'LEARN_MORE', value: { link: MENU_URL } }),
       access_token: token
     });
     created.creative_id = creativeRes.data.id;
