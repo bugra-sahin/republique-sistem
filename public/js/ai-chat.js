@@ -1,5 +1,15 @@
-// Republique AI — bagimsiz sohbet widget'i (mevcut .ai-btn'e baglanir, kendi stilini enjekte eder)
+// Republique AI — bagimsiz sohbet widget'i. Yalnizca MASADA (/menu/:masa) hizmet verir.
 (function () {
+  function getTable() {
+    const p = new URLSearchParams(location.search);
+    let t = p.get('masa') || p.get('table');
+    if (!t && location.pathname.startsWith('/menu/')) {
+      t = decodeURIComponent(location.pathname.replace('/menu/', '').replace(/\/$/, ''));
+    }
+    return (t && t.trim() && t !== 'Bilinmiyor') ? t.trim() : null;
+  }
+
+  const table = getTable();
   const history = [];
   let opened = false;
 
@@ -20,6 +30,7 @@
   .rai-inp{flex:1;background:#241f18;border:1px solid #3a2f1c;border-radius:12px;color:#f0e6d2;padding:10px 12px;font-size:14px;outline:none}
   .rai-send{background:#c9a24b;border:none;color:#1a1410;border-radius:12px;padding:0 16px;font-weight:600;cursor:pointer}
   .rai-send:disabled{opacity:.5;cursor:default}
+  .rai-wait{align-self:flex-start;color:#c9a24b;font-size:13px;font-style:italic}
   .rai-typing{align-self:flex-start;color:#8a7d6a;font-size:13px;font-style:italic}
   `;
   const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
@@ -52,32 +63,47 @@
     panel.classList.add('open');
     if (!opened) {
       opened = true;
-      addMsg('assistant', 'Merhaba! Ben Republique AI. Menumuzden ne onermemi istersiniz? 🍸');
+      addMsg('assistant', 'Merhaba! Ben Republique AI. Bu aksam icin ne onermemi istersiniz? 🍸');
     }
     setTimeout(() => inp.focus(), 100);
   }
   function close() { panel.classList.remove('open'); }
 
-  async function send() {
-    const text = inp.value.trim();
+  async function callApi(text) {
+    const r = await fetch('/api/chat', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: text, table: table, history: history.filter(h => h._sent) })
+    });
+    return r.json();
+  }
+
+  async function send(retryText) {
+    const text = retryText || inp.value.trim();
     if (!text) return;
-    inp.value = '';
-    addMsg('user', text);
-    history.push({ role: 'user', content: text });
+    if (!retryText) { inp.value = ''; addMsg('user', text); history.push({ role: 'user', content: text, _sent: true }); }
     sendBtn.disabled = true;
     const typing = document.createElement('div');
     typing.className = 'rai-typing'; typing.textContent = 'yaziyor...';
     body.appendChild(typing); body.scrollTop = body.scrollHeight;
     try {
-      const r = await fetch('/api/chat', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text, history: history.slice(0, -1) })
-      });
-      const data = await r.json();
+      const data = await callApi(text);
       typing.remove();
+      if (data && data.queued) {
+        // Siraya alindi: geri sayim goster, sure sonunda otomatik tekrar dene
+        let sec = Math.max(1, parseInt(data.waitSeconds) || 5);
+        const w = document.createElement('div'); w.className = 'rai-wait';
+        body.appendChild(w); body.scrollTop = body.scrollHeight;
+        const tick = () => {
+          w.textContent = `Republique AI su an diger misafirlerimize hizmet veriyor — siraniza ~${sec} sn`;
+          if (sec <= 0) { clearInterval(iv); w.remove(); send(text); return; }
+          sec--;
+        };
+        tick(); const iv = setInterval(tick, 1000);
+        return;
+      }
       const reply = (data && data.reply) || 'Su an yanit veremiyorum.';
       addMsg('assistant', reply);
-      history.push({ role: 'assistant', content: reply });
+      history.push({ role: 'assistant', content: reply, _sent: true });
     } catch (e) {
       typing.remove();
       addMsg('assistant', 'Baglanti sorunu yasadim, birazdan tekrar deneyin.');
@@ -86,13 +112,15 @@
     }
   }
 
-  sendBtn.addEventListener('click', send);
+  sendBtn.addEventListener('click', () => send());
   inp.addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
   panel.querySelector('.rai-close').addEventListener('click', close);
 
   function wire() {
     const btn = document.querySelector('.ai-btn');
-    if (btn) btn.addEventListener('click', open);
+    if (!btn) return;
+    if (!table) { btn.style.display = 'none'; return; } // masasiz (reklam/genel) -> AI gizli
+    btn.addEventListener('click', open);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire); else wire();
 })();
