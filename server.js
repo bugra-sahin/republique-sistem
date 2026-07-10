@@ -43,10 +43,10 @@ app.get("/api/menu", (req, res) => {
 // ============ REPUBLIQUE AI GARSON ============
 app.post("/api/chat", async (req, res) => {
   try {
-    const { message, history } = req.body || {};
+    const { message, history, table } = req.body || {};
     const repId = (req.cookies && req.cookies.rep_id) || null;
     const ip = (req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0].trim();
-    const result = await chatWithWaiter({ message, repId, ip, history });
+    const result = await chatWithWaiter({ message, repId, ip, history, table });
     res.json(result);
   } catch (e) {
     console.error("/api/chat hata:", e.message);
