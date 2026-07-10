@@ -212,7 +212,9 @@ function sanitizeReply(t) {
 // ANTHROPIC (Claude) cagrisi
 async function callAnthropic(system, msgs, apiKey) {
   const resp = await axios.post('https://api.anthropic.com/v1/messages', {
-    model: MODEL, max_tokens: 400, system, messages: msgs
+    model: MODEL, max_tokens: 400,
+    system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
+    messages: msgs
   }, { headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' }, timeout: 20000 });
   if (resp.data && Array.isArray(resp.data.content)) return resp.data.content.map(c => c.text || '').join('').trim();
   return '';
