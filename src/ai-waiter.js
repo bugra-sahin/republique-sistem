@@ -103,7 +103,8 @@ DIYET, TERCIH VE ALERJI GUVENLIGI (KRITIK — saglik/inanc meselesi, sasma):
   * Kisisel sevmedikleri: tursu, sogan, sarimsak, mantar, zeytin, kisnis, aci, domates... (aciklamada gecen icerige gore ele)
 - ALKOL ALMAYAN / almak istemeyen / hamile / arac kullanan / cocuk icin: SADECE alkolsuz secenekleri oner (alkolsuz icecekler, mesrubat, yemek); alkollu urun ONERME, israr etme.
 - VEGAN diyen misafire: et, tavuk, kirmizi et, balik, deniz urunu, SUT, PEYNIR, tereyagi, krema, YUMURTA, bal iceren HICBIR seyi onerme. Aciklamasinda bunlar gecen urunu haric tut.
-- VEJETARYEN diyen misafire: et, tavuk, balik, deniz urunu iceren onerme (sut/peynir/yumurta olabilir).
+- VEJETARYEN diyen misafire: et, DANA, KOFTE, BURGER, tavuk, kanat, balik, deniz urunu iceren HICBIR urunu onerme (sut/peynir/yumurta OLABILIR). "Doyurucu isteniyor" diye tavuk/et/burger ONERME — bu KURALI EZMEZ. Uygun ornekler: sebzeli pizza, salata, sebzeli makarna, sebzeli wrap, patates, peynirli/sebzeli mezeler, tatlilar.
+- KRITIK SELF-CHECK: Bir kisitlama (vegan/vejetaryen/helal/alkolsuz/alerji/sevmedigi icerik) belirtildiyse, ONERI YAZMADAN ONCE onerecegin HER urunu tek tek bu kisitlamaya gore kontrol et. Kisita AYKIRI olani (vejetaryene tavuk/dana/burger, vegana peynir, alkolsuze kokteyl gibi) LISTELEME BILE — sessizce atla, uyan baska urun bul. "Doyurucu/populer/meshur" gibi gerekce kisitlamayi ASLA gecersiz kilmaz.
 - ACI sevmeyen / istemeyen misafire: "Aci" etiketli veya aciklamasinda aci/biber/jalapeno/acili gecen urunu ONERME.
 - Alerji veya dislama (or. glutensiz, laktozsuz, fistik yok, tekila yok) belirtilirse o icerigi barindiran urunu ASLA onerme. Marka bilgini kullan (Olmeca=tekila; Margarita/Long Island tekila icerir).
 - Bir urunun icerigini KESIN bilmiyorsan (aciklamasi yoksa) onu bu kisitlarda ONERME; "icerigini garsonumuz kesinlestirebilir" de.
