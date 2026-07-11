@@ -44,6 +44,7 @@
       <button class="tab-btn active" data-tab="tab-live">Canlı Akış</button>
       <button class="tab-btn" data-tab="tab-upload">Adisyon Yükle</button>
       <button class="tab-btn" data-tab="tab-reports">Raporlar</button>
+      <button class="tab-btn" data-tab="tab-chats">Sohbetler</button>
       <button class="tab-btn" data-tab="tab-ads" style="color: var(--accent-purple); font-weight: bold;">Ads Manager (AI)</button>
     </div>
   </nav>
@@ -164,6 +165,37 @@
         </button>
       </div>
 
+    </div>
+
+    <!-- Sekme: Sohbetler (AI garson konuşmaları) -->
+    <div id="tab-chats" class="tab-content">
+      <div class="glass-card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 10px;">
+          <h2 style="margin:0;">Republique AI Sohbet Kayıtları</h2>
+          <select id="chatDaysFilter" class="filter-select" style="padding: 5px 10px; background: rgba(0,0,0,0.5); color: white; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px;">
+            <option value="1">Bugün / Son 1 gün</option>
+            <option value="7" selected>Son 7 gün</option>
+            <option value="30">Son 30 gün</option>
+            <option value="365">Tümü</option>
+          </select>
+        </div>
+        <p style="color: var(--text-secondary); margin-bottom: 1rem;">Misafirlerin AI garsona sorduğu sorular ve verilen yanıtlar. Öğrenme/iyileştirme için birlikte inceleyebiliriz.</p>
+        <div class="table-wrapper">
+          <table id="chatLogsTable">
+            <thead>
+              <tr>
+                <th style="white-space:nowrap;">Saat</th>
+                <th style="white-space:nowrap;">Masa</th>
+                <th>Misafir Sorusu</th>
+                <th>AI Yanıtı</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="4" style="text-align:center; color: var(--text-secondary);">Yükleniyor...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     <!-- Sekme 4: Reklam Yönetimi (AI) -->
