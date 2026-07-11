@@ -118,6 +118,19 @@ app.get("/api/admin/top-products", async (req, res) => {
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
+// AI garson sohbet kayitlari (admin - konusmalari incelemek/ogrenmek icin)
+app.get("/api/admin/chat-logs", async (req, res) => {
+  try {
+    const days = Math.min(365, parseInt(req.query.days) || 7);
+    const limit = Math.min(2000, parseInt(req.query.limit) || 500);
+    const { rows } = await db.query(
+      "SELECT id, rep_id, table_name, user_msg, ai_reply, provider, created_at FROM chat_logs WHERE created_at >= now() - ($1||' days')::interval ORDER BY created_at DESC LIMIT $2",
+      [String(days), limit]
+    );
+    res.json({ ok: true, sayi: rows.length, kayitlar: rows });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 
 app.post("/api/track", async (req, res) => {
   try {
