@@ -60,7 +60,7 @@
   const sidebar=document.getElementById('sidebar'), overlay=document.getElementById('overlay');
   nav.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
     [...nav.children].forEach(x=>x.classList.remove('active'));b.classList.add('active');
-    frame.src=b.dataset.src; sidebar.classList.remove('open');overlay.classList.remove('show');});
+    frame.src=b.dataset.src + (b.dataset.src.includes('?')?'&':'?') + 't=' + Date.now(); sidebar.classList.remove('open');overlay.classList.remove('show');});
   document.getElementById('menuBtn').onclick=()=>{sidebar.classList.add('open');overlay.classList.add('show');};
   overlay.onclick=()=>{sidebar.classList.remove('open');overlay.classList.remove('show');};
 </script>
