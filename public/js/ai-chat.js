@@ -42,8 +42,9 @@
   .rai-wait{align-self:flex-start;color:#d4af37;font-size:13px;font-style:italic}
   .rai-typing{align-self:flex-start;color:#a0aab2;font-size:13px;font-style:italic}
   @media(max-width:520px){
-    .rai-panel{right:0;left:0;bottom:0;width:100%;height:78vh;border-radius:18px 18px 0 0;border-left:0;border-right:0;border-bottom:0}
-  }`;
+    .rai-panel{right:0;left:0;bottom:0;top:auto;width:100%;height:88vh;height:88dvh;border-radius:18px 18px 0 0;border-left:0;border-right:0;border-bottom:0}
+  }
+  body.rai-lock{overflow:hidden!important}`;
   const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
 
   // Alttan karsilama pili (baslamadiysa) / yuvarlak buton (basladiysa)
@@ -75,11 +76,37 @@
     body.appendChild(d); body.scrollTop = body.scrollHeight;
     return d;
   }
+  const isMobile = () => window.matchMedia('(max-width:520px)').matches;
+  let savedScrollY = 0;
+  function lockBody() {
+    savedScrollY = window.scrollY || window.pageYOffset || 0;
+    document.body.classList.add('rai-lock');
+    document.body.style.position = 'fixed';
+    document.body.style.top = (-savedScrollY) + 'px';
+    document.body.style.left = '0'; document.body.style.right = '0'; document.body.style.width = '100%';
+  }
+  function unlockBody() {
+    document.body.classList.remove('rai-lock');
+    document.body.style.position = ''; document.body.style.top = '';
+    document.body.style.left = ''; document.body.style.right = ''; document.body.style.width = '';
+    window.scrollTo(0, savedScrollY);
+  }
+  // Klavye acilinca paneli gorunur alana (visualViewport) hizala; sayfa KAYMAZ
+  function syncVV() {
+    if (!isMobile() || !panel.classList.contains('open')) return;
+    const vv = window.visualViewport; if (!vv) return;
+    panel.style.height = vv.height + 'px';
+    panel.style.top = (vv.offsetTop) + 'px';
+    panel.style.bottom = 'auto';
+  }
+  function clearVV() { panel.style.height = ''; panel.style.top = ''; panel.style.bottom = ''; }
   function open() {
     fab.classList.add('hidden');
     panel.classList.add('open');
     if (!started) { started = true; addMsg('assistant', 'Merhaba, hoş geldiniz! Bu akşam için ne önermemi istersiniz?'); }
-    // Mobilde otomatik focus SAYFAYI KAYDIRIR -> preventScroll + dokunmatikte focus etme
+    lockBody();
+    if (window.visualViewport) { window.visualViewport.addEventListener('resize', syncVV); window.visualViewport.addEventListener('scroll', syncVV); syncVV(); }
+    // Mobilde otomatik focus SAYFAYI KAYDIRIR -> masaustunde focus, dokunmatikte kullanici kendi dokunur
     const touch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
     if (!touch) { try { inp.focus({ preventScroll: true }); } catch (e) {} }
   }
@@ -87,6 +114,9 @@
     panel.classList.remove('open');
     fab.classList.remove('hidden');
     fab.classList.add('round'); // baslamis -> yuvarlak buton (greet gizli)
+    if (window.visualViewport) { window.visualViewport.removeEventListener('resize', syncVV); window.visualViewport.removeEventListener('scroll', syncVV); }
+    clearVV();
+    unlockBody();
   }
   fab.addEventListener('click', function (e) { e.preventDefault(); open(); });
   panel.querySelector('.rai-close').addEventListener('click', close);
