@@ -16,8 +16,41 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (targetId === 'tab-live') fetchLiveScans();
       else if (targetId === 'tab-ads') fetchAdsManager();
+      else if (targetId === 'tab-chats') fetchChatLogs();
     });
   });
+
+  // AI Sohbet kayitlari
+  const chatDaysEl = document.getElementById('chatDaysFilter');
+  if (chatDaysEl) chatDaysEl.addEventListener('change', fetchChatLogs);
+  async function fetchChatLogs() {
+    const tbody = document.querySelector('#chatLogsTable tbody');
+    if (!tbody) return;
+    const days = (document.getElementById('chatDaysFilter') || {}).value || '7';
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color: var(--text-secondary);">Yükleniyor...</td></tr>';
+    try {
+      const r = await fetch('/api/admin/chat-logs?days=' + days);
+      const d = await r.json();
+      const rows = (d && d.kayitlar) || [];
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color: var(--text-secondary);">Bu dönemde sohbet kaydı yok.</td></tr>';
+        return;
+      }
+      const esc = s => String(s == null ? '' : s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+      tbody.innerHTML = rows.map(row => {
+        const dt = new Date(row.created_at);
+        const saat = isNaN(dt) ? '' : dt.toLocaleString('tr-TR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+        return '<tr>' +
+          '<td style="white-space:nowrap;">' + esc(saat) + '</td>' +
+          '<td style="white-space:nowrap;">' + esc(row.table_name || '-') + '</td>' +
+          '<td>' + esc(row.user_msg) + '</td>' +
+          '<td style="color: var(--text-secondary);">' + esc(row.ai_reply) + '</td>' +
+        '</tr>';
+      }).join('');
+    } catch (e) {
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#e57373;">Kayıtlar alınamadı: ' + e.message + '</td></tr>';
+    }
+  }
 
   // Sayfa yüklendiğinde otomatik ilk sekmeyi (Canlı Akış) çek
   fetchLiveScans();
@@ -531,7 +564,7 @@ document.addEventListener('DOMContentLoaded', () => {
 (function(){
   function openFromHash(){
     var h=(location.hash||'').replace('#','').toLowerCase();
-    var map={ads:'tab-ads',reports:'tab-reports',live:'tab-live',upload:'tab-upload'};
+    var map={ads:'tab-ads',reports:'tab-reports',live:'tab-live',upload:'tab-upload',chats:'tab-chats'};
     if(map[h]){ var b=document.querySelector('.tab-btn[data-tab="'+map[h]+'"]'); if(b) b.click(); }
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', openFromHash); else openFromHash();
