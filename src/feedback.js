@@ -58,12 +58,14 @@ async function classify(text) {
 
 function register(app, db) {
   // Tablolar
+  // Tablo ve unique index SIRALI olusturulmali (index tablodan sonra) — aksi halde ON CONFLICT calismaz
   db.query(`CREATE TABLE IF NOT EXISTS uyeler (
     id SERIAL PRIMARY KEY, isim TEXT, telefon TEXT, telefon_hash TEXT,
     rep_id TEXT, masa TEXT, kvkk_onay BOOLEAN DEFAULT false,
     created_at TIMESTAMPTZ DEFAULT now()
-  )`).catch(e => console.error("uyeler tablo:", e.message));
-  db.query(`CREATE UNIQUE INDEX IF NOT EXISTS uyeler_tel_uk ON uyeler(telefon)`).catch(() => {});
+  )`)
+    .then(() => db.query(`CREATE UNIQUE INDEX IF NOT EXISTS uyeler_tel_uk ON uyeler(telefon)`))
+    .catch(e => console.error("uyeler tablo/index:", e.message));
 
   db.query(`CREATE TABLE IF NOT EXISTS geri_bildirimler (
     id SERIAL PRIMARY KEY, rep_id TEXT, masa TEXT, kaynak TEXT,
