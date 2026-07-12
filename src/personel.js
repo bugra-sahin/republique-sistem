@@ -63,6 +63,20 @@ function markUsed(k) { _used.set(k, Date.now()); }
 function isUsed(k) { return _used.has(k); }
 setInterval(() => { const t = Date.now(); for (const [k, v] of _used) if (t - v > 60000) _used.delete(k); }, 30000);
 
+// --- Kaba-kuvvet korumasi (login/kayit icin basit bellek rate-limit) ---
+const _rl = new Map();
+function rateLimited(key, max, windowMs) {
+  const now = Date.now();
+  const rec = _rl.get(key) || { n: 0, t: now };
+  if (now - rec.t > windowMs) { rec.n = 0; rec.t = now; }
+  rec.n++; _rl.set(key, rec);
+  return rec.n > max;
+}
+setInterval(() => { const t = Date.now(); for (const [k, v] of _rl) if (t - v.t > 3600000) _rl.delete(k); }, 300000);
+
+// CSV formul-enjeksiyonu korumasi (Excel'de =,+,-,@ ile baslayan hucre komut olabilir)
+function csvSafe(v) { let s = String(v == null ? "" : v); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; return '"' + s.replace(/"/g, '""') + '"'; }
+
 // --- Oturum cookie'si (personel) ---
 function makeSession(personelId, deviceId) {
   const exp = Date.now() + 12 * 3600 * 1000; // 12 saat
@@ -184,6 +198,7 @@ function register(app, db) {
   // Kiosk kayit talebi (cihaz onayi icin)
   app.post("/api/kiosk/register", async (req, res) => {
     try {
+      if (rateLimited("kreg:" + ipOf(req), 10, 600000)) return res.status(429).json({ ok: false, error: "cok fazla istek" });
       const key = String((req.body && req.body.key) || "").slice(0, 80);
       if (!/^[a-z0-9]{16,80}$/i.test(key)) return res.status(400).json({ ok: false, error: "gecersiz anahtar" });
       const ua = (req.headers["user-agent"] || "").slice(0, 200);
@@ -219,7 +234,11 @@ function register(app, db) {
   // Giris / ilk kayit. body: {ad, sifre, deviceKey}
   app.post("/api/personel/login", async (req, res) => {
     try {
-      const ad = String((req.body && req.body.ad) || "").trim().slice(0, 80);
+      const ip = ipOf(req);
+      const adRaw = String((req.body && req.body.ad) || "").trim().slice(0, 80);
+      if (rateLimited("plogin:" + ip, 12, 600000) || rateLimited("plogin:" + ip + ":" + adRaw.toLowerCase(), 6, 600000))
+        return res.status(429).json({ ok: false, error: "Cok fazla giris denemesi. Lutfen birkac dakika sonra tekrar deneyin." });
+      const ad = adRaw;
       const sifre = String((req.body && req.body.sifre) || "");
       const deviceKey = String((req.body && req.body.deviceKey) || "").slice(0, 80);
       if (!ad || sifre.length < 4 || !/^[a-z0-9]{16,80}$/i.test(deviceKey))
@@ -446,7 +465,7 @@ function register(app, db) {
         const avans = (await db.query("SELECT COALESCE(SUM(tutar),0) s FROM avanslar WHERE personel_id=$1 AND to_char(tarih,'YYYY-MM')=$2", [p.id, ay])).rows[0].s;
         const maas = (await db.query("SELECT COALESCE(SUM(tutar),0) s FROM maas_odemeleri WHERE personel_id=$1 AND donem=$2", [p.id, ay])).rows[0].s;
         const saat = ((dk + Number(duz)) / 60).toFixed(1);
-        lines.push([p.ad, saat, duz, avans, maas, ay].join(";"));
+        lines.push([csvSafe(p.ad), saat, duz, avans, maas, ay].join(";"));
       }
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
       res.setHeader("Content-Disposition", 'attachment; filename="bordro-' + ay + '.csv"');
