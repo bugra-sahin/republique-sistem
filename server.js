@@ -48,8 +48,24 @@ db.query(`CREATE TABLE IF NOT EXISTS audit_log (
 
 // Admin kimlik dogrulama (Basic Auth). ADMIN_PASSWORD ayarliysa AKTIF; degilse ACIK (kimse kilitlenmez).
 // Kapsam: /admin (panel) ve /api/admin/* (yonetim API'leri). Menu/AI/track herkese acik kalir.
+// Admin sifresi: /secrets/adminpw dosyasindan (mangle-proof: sadece rakam/harf yazilir) VEYA env'den.
+let _pwCache = { v: null, t: 0 };
+function getAdminPw() {
+  const now = Date.now();
+  if (now - _pwCache.t < 10000) return _pwCache.v;
+  let pw = process.env.ADMINPW || process.env.ADMIN_PASSWORD || null;
+  try {
+    const fs = require("fs");
+    if (fs.existsSync("/secrets/adminpw")) {
+      const f = fs.readFileSync("/secrets/adminpw", "utf8").trim();
+      if (f) pw = f;
+    }
+  } catch (e) {}
+  _pwCache = { v: pw, t: now };
+  return pw;
+}
 function adminAuth(req, res, next) {
-  const pw = process.env.ADMIN_PASSWORD;
+  const pw = getAdminPw();
   if (!pw) return next();
   const p = req.path || "";
   if (!(p === "/admin" || p.startsWith("/admin/") || p.startsWith("/api/admin"))) return next();
