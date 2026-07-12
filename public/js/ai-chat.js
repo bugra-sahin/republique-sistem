@@ -8,7 +8,22 @@
     return (t && t.trim() && t !== 'Bilinmiyor') ? t.trim() : null;
   }
   const table = getTable();
-  if (!table) return; // AI yalnizca masada oturan misafire
+  if (!table) {
+    // Masasiz ziyaretci: ust "Republique AI" butonu tiklaninca nazik davet mesaji
+    function showVisitToast() {
+      let t = document.getElementById('raiVisitToast');
+      if (!t) {
+        t = document.createElement('div'); t.id = 'raiVisitToast';
+        t.style.cssText = "position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:10001;background:#0a1f16;color:#f3d573;border:1px solid rgba(212,175,55,.5);padding:14px 18px;border-radius:14px;max-width:88vw;font-family:'Outfit',system-ui,sans-serif;font-size:14px;line-height:1.4;box-shadow:0 10px 30px rgba(0,0,0,.5);text-align:center";
+        t.textContent = "Republique AI'ı denemek için bizi ziyaret edebilirsiniz — masanızdaki QR'ı okuttuğunuzda size özel öneriler sunarım.";
+        document.body.appendChild(t);
+      }
+      t.style.display = 'block'; clearTimeout(t._to); t._to = setTimeout(function () { t.style.display = 'none'; }, 5000);
+    }
+    function wireNoTable() { const b = document.querySelector('.ai-btn'); if (b) b.addEventListener('click', function (e) { e.preventDefault(); showVisitToast(); }); }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wireNoTable); else wireNoTable();
+    return;
+  }
 
   const history = [];
   let started = false;
@@ -150,6 +165,10 @@
         const g = norm(data.goto); const btns = [...document.querySelectorAll('.cat-btn')];
         let b = btns.find(x => norm(x.textContent) === g) || btns.find(x => norm(x.textContent).includes(g) || g.includes(norm(x.textContent)));
         if (b) { close(); setTimeout(() => b.click(), 250); }
+      }
+      // AI bir urunu gostermek isterse: kartini (foto+detay) ac
+      if (data && data.show && typeof window.raiShowProduct === 'function') {
+        close(); setTimeout(() => window.raiShowProduct(data.show), 300);
       }
     } catch (e) { typing.remove(); addMsg('assistant', 'Bağlantı sorunu yaşadım, birazdan tekrar deneyin.'); }
     finally { sendBtn.disabled = false; }
