@@ -37,6 +37,19 @@
       body:JSON.stringify({product:name.textContent.trim(),table:getTable(),rep_id:getCookie('rep_id')})}).catch(()=>{});}catch(e){}
   }
 
+  // AI [[SHOW:UrunAdi]] icin: urunu ADIYLA bul ve kartini (foto+detay) ac
+  function norm(x){return String(x||'').toLowerCase().replace(/ı/g,'i').replace(/İ/g,'i').replace(/ş/g,'s').replace(/ğ/g,'g').replace(/ü/g,'u').replace(/ö/g,'o').replace(/ç/g,'c').replace(/[^a-z0-9]/g,'').trim();}
+  window.raiShowProduct=function(name){
+    try{
+      const target=norm(name); if(!target)return false;
+      const cards=[...document.querySelectorAll('.product-card')];
+      let card=cards.find(c=>{const n=c.querySelector('.product-name');return n&&norm(n.textContent)===target;});
+      if(!card) card=cards.find(c=>{const n=c.querySelector('.product-name');return n&&(norm(n.textContent).includes(target)||target.includes(norm(n.textContent)));});
+      if(card){card.scrollIntoView({behavior:'smooth',block:'center'});openCard(card);return true;}
+    }catch(e){}
+    return false;
+  };
+
   function wire(){
     const cont=document.getElementById('menuContainer')||document.body;
     cont.addEventListener('click',e=>{const card=e.target.closest('.product-card');if(card)openCard(card);});
