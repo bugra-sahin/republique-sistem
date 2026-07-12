@@ -219,9 +219,9 @@ async function chatWithWaiter({ message, repId, ip, history, table }) {
   const menuText = flattenMenu(menuObj);
   const system = buildSystemPrompt(menuText, process.env.LLM_WEEKLY_FOCUS || '');
   // ONERI CESITLILIGI: her istekte rastgele degisen kokteyller -> herkese ayni seyi onermeyi kirar (ana prompt cache'ini bozmaz)
-  const featured = randomCocktails(menuObj, 4);
+  const featured = randomCocktails(menuObj, 5).filter(n => !/green ankara/i.test(n));
   const dynamicHint = featured.length
-    ? `ONERI CESITLILIGI (bu yanit icin): Uygun oldugunda su kokteyllerden de yararlanabilirsin, ayni ismi herkese verme: ${featured.join(', ')}. (Diyet/tercih/tat kisitlari her zaman once gelir; bunlar sadece cesitlilik icin fikir.)`
+    ? `ONERI CESITLILIGI (bu yanit icin ONEMLI): Bir imza kokteyl onereceksen Green Ankara'yi VARSAYILAN/otomatik secme. Bu yanitta ONCE sunu dusun: ${featured[0]}. Uygun degilse su seceneklerden birini sec: ${featured.slice(1, 4).join(', ')}. Her misafire ayni kokteyli verme, cesitlendir. (Diyet/tercih/tat kisitlari HER ZAMAN once gelir; misafir acikca Green Ankara isterse tabii ki onu ver.)`
     : '';
 
   // Sohbet gecmisi (son 4 mesaj — maliyet icin kisa tutuldu)
