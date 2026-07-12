@@ -19,6 +19,12 @@ db.query(`CREATE TABLE IF NOT EXISTS product_views (
   id SERIAL PRIMARY KEY, product TEXT, rep_id TEXT, table_name TEXT, created_at TIMESTAMPTZ DEFAULT now()
 )`).catch(e => console.error("product_views tablo:", e.message));
 
+// Bakis/dwell: misafirin tiklamadan hangi BOLUM/URUNe ne kadar baktigi (adisyonla eslestirilir)
+db.query(`CREATE TABLE IF NOT EXISTS section_views (
+  id SERIAL PRIMARY KEY, kind TEXT DEFAULT 'section', section TEXT, dwell_ms INTEGER, rep_id TEXT, table_name TEXT, created_at TIMESTAMPTZ DEFAULT now()
+)`).catch(e => console.error("section_views tablo:", e.message));
+db.query(`ALTER TABLE section_views ADD COLUMN IF NOT EXISTS kind TEXT DEFAULT 'section'`).catch(() => {});
+
 // LLM anahtarlarini kalici gizli dosyadan yukle (/secrets/llm.env)
 (function loadLlmSecrets() {
   try {
@@ -168,6 +174,24 @@ app.post("/api/track-view", async (req, res) => {
     if (product) {
       db.query("INSERT INTO product_views (product, rep_id, table_name) VALUES ($1,$2,$3)",
         [String(product).slice(0,200), rep_id || null, table || null]).catch(() => {});
+    }
+    res.json({ ok: true });
+  } catch (e) { res.status(200).json({ ok: false }); }
+});
+
+// Bakis/dwell loglama (bolum + urun duzeyi; tiklamadan ilgi sinyali)
+app.post("/api/track-dwell", async (req, res) => {
+  try {
+    const { items, table, rep_id } = req.body || {};
+    if (Array.isArray(items)) {
+      for (const it of items.slice(0, 80)) {
+        const name = it && (it.section || it.name || it.product);
+        const ms = it && parseInt(it.ms);
+        if (name && ms > 0) {
+          db.query("INSERT INTO section_views (kind, section, dwell_ms, rep_id, table_name) VALUES ($1,$2,$3,$4,$5)",
+            [it.kind === 'product' ? 'product' : 'section', String(name).slice(0, 200), Math.min(ms, 3600000), rep_id || null, table || null]).catch(() => {});
+        }
+      }
     }
     res.json({ ok: true });
   } catch (e) { res.status(200).json({ ok: false }); }
