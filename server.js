@@ -42,8 +42,17 @@ db.query(`ALTER TABLE section_views ADD COLUMN IF NOT EXISTS kind TEXT DEFAULT '
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
+
+// Guvenlik basliklari (tum yanitlara) — clickjacking/mime-sniffing/referrer sertlestirme
+app.use((req, res, next) => {
+  res.set("X-Content-Type-Options", "nosniff");
+  res.set("X-Frame-Options", "SAMEORIGIN");
+  res.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.set("Permissions-Policy", "geolocation=(), microphone=(), camera=(self)");
+  next();
+});
 
 // === ADMIN GUVENLIK + AUDIT LOG ===
 // Audit log tablosu: admin panelinde yapilan her ISLEM (degisiklik) kaydedilir
@@ -82,7 +91,8 @@ function adminAuth(req, res, next) {
       const dec = Buffer.from(m[1], "base64").toString("utf8");
       const idx = dec.indexOf(":");
       const pass = idx >= 0 ? dec.slice(idx + 1) : "";
-      if (pass === pw) return next();
+      const a = Buffer.from(String(pass)), b = Buffer.from(String(pw));
+      if (a.length === b.length && require("crypto").timingSafeEqual(a, b)) return next();
     } catch (e) {}
   }
   res.set("WWW-Authenticate", 'Basic realm="Republique Yonetim"');
