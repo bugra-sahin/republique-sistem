@@ -69,6 +69,18 @@ function randomCocktails(menu, n) {
   return names.slice(0, n);
 }
 
+// Su an aktif olan (menude OLMAYAN) kampanyalar — Istanbul saatine gore
+function getActiveCampaigns() {
+  const now = istNow();
+  const h = now.getUTCHours(); // Istanbul saati (istNow +3 kaydirilmis)
+  const list = [];
+  // Ogle firsati: her gun 14:00'a kadar, yemek yaninda UCRETSIZ soft icecek
+  if (h < 14) {
+    list.push("OGLE FIRSATI (bugun 14:00'a kadar): Yemek siparisinin yaninda UCRETSIZ soft icecek ikram ediyoruz. DAHIL olanlar: Cola, Fanta, Sprite, Cappy meyve sulari, Ice Tea, soda, cay. DAHIL OLMAYANLAR: portakal suyu, Red Bull ve enerji icecekleri. Misafir yemek konusuyorsa bu ucretsiz icecek firsatini nazikce hatirlatabilirsin (14:00'dan sonra ANMA).");
+  }
+  return list;
+}
+
 // Menu JSON'unu kompakt metne cevir (kategori > urun > SU ANKI fiyat)
 function flattenMenu(menu) {
   if (!menu) return '(menu su an yuklenemedi)';
@@ -220,9 +232,12 @@ async function chatWithWaiter({ message, repId, ip, history, table }) {
   const system = buildSystemPrompt(menuText, process.env.LLM_WEEKLY_FOCUS || '');
   // ONERI CESITLILIGI: her istekte rastgele degisen kokteyller -> herkese ayni seyi onermeyi kirar (ana prompt cache'ini bozmaz)
   const featured = randomCocktails(menuObj, 5).filter(n => !/green ankara/i.test(n));
-  const dynamicHint = featured.length
+  const varietyHint = featured.length
     ? `ONERI CESITLILIGI (bu yanit icin ONEMLI): Bir imza kokteyl onereceksen Green Ankara'yi VARSAYILAN/otomatik secme. Bu yanitta ONCE sunu dusun: ${featured[0]}. Uygun degilse su seceneklerden birini sec: ${featured.slice(1, 4).join(', ')}. Her misafire ayni kokteyli verme, cesitlendir. (Diyet/tercih/tat kisitlari HER ZAMAN once gelir; misafir acikca Green Ankara isterse tabii ki onu ver.)`
     : '';
+  const camps = getActiveCampaigns();
+  const campHint = camps.length ? 'SU AN AKTIF KAMPANYA(LAR) (menude yazmaz, dogru bilgi ver):\n- ' + camps.join('\n- ') : '';
+  const dynamicHint = [varietyHint, campHint].filter(Boolean).join('\n\n');
 
   // Sohbet gecmisi (son 4 mesaj — maliyet icin kisa tutuldu)
   const msgs = [];
