@@ -1,0 +1,48 @@
+# STAGING (test2.republique.tr) - izole kopya, prod agina bagli (caddy isimle erisir)
+# Calistirma: cd /opt/republique-staging && docker compose -p staging -f docker-compose.staging.yml up -d --build
+services:
+  db-staging:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: republique
+      POSTGRES_USER: republique
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - stagingdbdata:/var/lib/postgresql/data
+
+  app-staging:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PORT: 3000
+      DATABASE_URL: postgres://republique:${POSTGRES_PASSWORD}@db-staging:5432/republique
+    depends_on:
+      - db-staging
+    volumes:
+      - llmsecrets:/secrets
+      - stagingmenudata:/app/data
+
+  erp-staging:
+    build: ./erp
+    restart: unless-stopped
+    depends_on:
+      - db-staging
+    volumes:
+      - stagingerpdata:/data
+      - llmsecrets:/secrets:ro
+
+volumes:
+  stagingdbdata:
+  stagingmenudata:
+  stagingerpdata:
+  llmsecrets:
+    external: true
+    name: republique_llmsecrets
+
+networks:
+  default:
+    name: republique_default
+    external: true
