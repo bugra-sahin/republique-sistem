@@ -40,9 +40,12 @@
   <aside class="sidebar" id="sidebar">
     <div class="brand">REPUBLIQUE<small>Yönetim</small></div>
     <nav class="nav" id="nav">
-      <button data-src="/admin/operasyon.html" class="active"><span class="material-icons-round">insights</span> Adisyon &amp; Rapor</button>
-      <button data-src="/admin/operasyon.html#ads"><span class="material-icons-round">campaign</span> Reklam Yönetimi</button>
-      <button data-src="/erp/"><span class="material-icons-round">account_balance_wallet</span> Cari Hesap (ERP)</button>
+      <button data-section="canli" data-src="/admin/operasyon.html#live" class="active"><span class="material-icons-round">sensors</span> Canlı Akış</button>
+      <button data-section="rapor" data-src="/admin/operasyon.html#reports"><span class="material-icons-round">assessment</span> Raporlar</button>
+      <button data-section="sohbetler" data-src="/admin/operasyon.html#chats"><span class="material-icons-round">forum</span> Sohbetler</button>
+      <button data-section="audit" data-src="/admin/operasyon.html#audit"><span class="material-icons-round">receipt_long</span> İşlem Kayıtları</button>
+      <button data-section="reklam" data-src="/admin/operasyon.html#ads"><span class="material-icons-round">campaign</span> Reklam Yönetimi</button>
+      <button data-section="cari" data-src="/erp/"><span class="material-icons-round">account_balance_wallet</span> Cari Hesap (ERP)</button>
     </nav>
     <div class="foot">Republique Social House<br>Tunalı · Ankara</div>
   </aside>
@@ -53,16 +56,29 @@
       <div class="brand" style="color:var(--gold)">Republique</div>
       <span style="width:26px"></span>
     </div>
-    <iframe id="frame" src="/admin/operasyon.html" title="Panel"></iframe>
+    <iframe id="frame" src="about:blank" title="Panel"></iframe>
   </div>
 <script>
   const frame=document.getElementById('frame'), nav=document.getElementById('nav');
   const sidebar=document.getElementById('sidebar'), overlay=document.getElementById('overlay');
-  nav.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
-    [...nav.children].forEach(x=>x.classList.remove('active'));b.classList.add('active');
-    frame.src=b.dataset.src + (b.dataset.src.includes('?')?'&':'?') + 't=' + Date.now(); sidebar.classList.remove('open');overlay.classList.remove('show');});
-  document.getElementById('menuBtn').onclick=()=>{sidebar.classList.add('open');overlay.classList.add('show');};
-  overlay.onclick=()=>{sidebar.classList.remove('open');overlay.classList.remove('show');};
+  function withBust(src){
+    var hi=src.indexOf('#'); var base=hi>=0?src.slice(0,hi):src; var hash=hi>=0?src.slice(hi):'';
+    return base + (base.indexOf('?')>=0?'&':'?') + 't=' + Date.now() + hash;
+  }
+  function currentSection(){ var m=(location.pathname||'').match(/\/admin\/([a-z]+)/); return m?m[1]:'canli'; }
+  function load(section, push){
+    var btns=[].slice.call(nav.children);
+    var b=btns.filter(function(x){return x.dataset.section===section;})[0] || btns[0];
+    btns.forEach(function(x){x.classList.remove('active');}); b.classList.add('active');
+    frame.src=withBust(b.dataset.src);
+    if(push){ try{ history.pushState({section:b.dataset.section}, '', '/admin/'+b.dataset.section); }catch(e){} }
+    sidebar.classList.remove('open');overlay.classList.remove('show');
+  }
+  nav.addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return; load(b.dataset.section, true);});
+  window.addEventListener('popstate',function(){ load(currentSection(), false); });
+  document.getElementById('menuBtn').onclick=function(){sidebar.classList.add('open');overlay.classList.add('show');};
+  overlay.onclick=function(){sidebar.classList.remove('open');overlay.classList.remove('show');};
+  load(currentSection(), false);
 </script>
 </body>
 </html>
