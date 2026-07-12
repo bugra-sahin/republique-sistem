@@ -38,6 +38,52 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 app.use(cookieParser());
+
+// === ADMIN GUVENLIK + AUDIT LOG ===
+// Audit log tablosu: admin panelinde yapilan her ISLEM (degisiklik) kaydedilir
+db.query(`CREATE TABLE IF NOT EXISTS audit_log (
+  id SERIAL PRIMARY KEY, ts TIMESTAMPTZ DEFAULT now(),
+  method TEXT, path TEXT, ip TEXT, user_agent TEXT, body_summary TEXT
+)`).catch(e => console.error("audit_log tablo:", e.message));
+
+// Admin kimlik dogrulama (Basic Auth). ADMIN_PASSWORD ayarliysa AKTIF; degilse ACIK (kimse kilitlenmez).
+// Kapsam: /admin (panel) ve /api/admin/* (yonetim API'leri). Menu/AI/track herkese acik kalir.
+function adminAuth(req, res, next) {
+  const pw = process.env.ADMIN_PASSWORD;
+  if (!pw) return next();
+  const p = req.path || "";
+  if (!(p === "/admin" || p.startsWith("/admin/") || p.startsWith("/api/admin"))) return next();
+  const hdr = req.headers.authorization || "";
+  const m = hdr.match(/^Basic\s+(.+)$/i);
+  if (m) {
+    try {
+      const dec = Buffer.from(m[1], "base64").toString("utf8");
+      const idx = dec.indexOf(":");
+      const pass = idx >= 0 ? dec.slice(idx + 1) : "";
+      if (pass === pw) return next();
+    } catch (e) {}
+  }
+  res.set("WWW-Authenticate", 'Basic realm="Republique Yonetim"');
+  return res.status(401).send("Yetkilendirme gerekli.");
+}
+app.use(adminAuth);
+
+// Audit: /api/admin altindaki DEGISIKLIK (GET disi) islemlerini kaydet
+app.use("/api/admin", (req, res, next) => {
+  try {
+    if (req.method !== "GET") {
+      const ip = (req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0].trim();
+      let bs = "";
+      try { bs = JSON.stringify(req.body || {}).slice(0, 500); } catch (e) {}
+      db.query(
+        "INSERT INTO audit_log (method, path, ip, user_agent, body_summary) VALUES ($1,$2,$3,$4,$5)",
+        [req.method, req.originalUrl, ip, (req.headers["user-agent"] || "").slice(0, 200), bs]
+      ).catch(() => {});
+    }
+  } catch (e) {}
+  next();
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -126,6 +172,18 @@ app.get("/api/admin/chat-logs", async (req, res) => {
     const { rows } = await db.query(
       "SELECT id, rep_id, table_name, user_msg, ai_reply, provider, created_at FROM chat_logs WHERE created_at >= now() - ($1||' days')::interval ORDER BY created_at DESC LIMIT $2",
       [String(days), limit]
+    );
+    res.json({ ok: true, sayi: rows.length, kayitlar: rows });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// Islem/audit kayitlari (admin panelinde yapilan degisiklikler)
+app.get("/api/admin/audit-log", async (req, res) => {
+  try {
+    const days = Math.min(365, parseInt(req.query.days) || 30);
+    const { rows } = await db.query(
+      "SELECT id, ts, method, path, ip, body_summary FROM audit_log WHERE ts >= now() - ($1||' days')::interval ORDER BY ts DESC LIMIT 500",
+      [String(days)]
     );
     res.json({ ok: true, sayi: rows.length, kayitlar: rows });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
