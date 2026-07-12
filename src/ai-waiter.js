@@ -250,7 +250,7 @@ async function chatWithWaiter({ message, repId, ip, history, table }) {
     text = text.replace(/\[\[AC:[^\]]+\]\]/ig, '').replace(/\[\[SHOW:[^\]]+\]\]/ig, '').trim();
     text = sanitizeReply(text);
     if (text.length > 1500) text = text.slice(0, 1500);
-    return { reply: text, ok: true, goto: goto, show: show };
+    return { reply: text, ok: true, goto: goto, show: show, usage: _lastUsage };
   } catch (e) {
     console.error('AI garson hatasi:', e.response ? JSON.stringify(e.response.data).slice(0, 400) : e.message);
     return { reply: 'Su an kucuk bir aksaklik yasadim, birazdan tekrar dener misiniz? Dilerseniz garsonumuz da yardimci olur.', ok: false };
@@ -269,6 +269,7 @@ function sanitizeReply(t) {
 }
 
 // ANTHROPIC (Claude) cagrisi
+let _lastUsage = null;
 async function callAnthropic(system, msgs, apiKey, dynamicHint) {
   // Ana sistem blogu CACHE'lenir (sabit -> ucuz). Dinamik ipucu (rotasyon) AYRI, cache'siz kucuk blok.
   const sys = [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }];
@@ -278,6 +279,7 @@ async function callAnthropic(system, msgs, apiKey, dynamicHint) {
     system: sys,
     messages: msgs
   }, { headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' }, timeout: 20000 });
+  _lastUsage = (resp.data && resp.data.usage) || null;
   if (resp.data && Array.isArray(resp.data.content)) return resp.data.content.map(c => c.text || '').join('').trim();
   return '';
 }
