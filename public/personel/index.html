@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="robots" content="noindex">
+<title>Republique · Personel</title>
+<style>
+  :root{--bg:#05100c;--panel:#0a1f16;--line:rgba(212,175,55,.2);--gold:#d4af37;--ink:#f5f5f5;--muted:#9aa}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:'Outfit',system-ui,sans-serif;min-height:100vh;padding:20px;max-width:520px;margin:0 auto}
+  .brand{font-family:'Playfair Display',serif;font-size:24px;color:var(--gold);text-align:center;margin:10px 0 20px}
+  .brand small{display:block;font-size:11px;letter-spacing:3px;color:var(--muted);text-transform:uppercase}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:14px}
+  input{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:11px;color:var(--ink);font-family:inherit;font-size:16px;padding:13px;margin-bottom:11px}
+  .btn{width:100%;background:linear-gradient(180deg,var(--gold),#b8912f);color:#05100c;border:0;border-radius:12px;padding:14px;font-family:inherit;font-weight:600;font-size:16px;cursor:pointer}
+  .btn.sec{background:none;color:var(--muted);border:1px solid var(--line);font-weight:400;margin-top:8px}
+  .btn.big{font-size:19px;padding:18px;margin-bottom:10px}
+  .msg{font-size:13px;color:var(--muted);margin-top:8px;text-align:center;line-height:1.5}
+  .msg.err{color:#f0a}
+  .durum{text-align:center;padding:20px;border-radius:14px;margin-bottom:14px;font-size:20px;font-weight:600}
+  .durum.mesai{background:rgba(87,187,138,.15);color:#7d9}
+  .durum.mola{background:rgba(212,175,55,.15);color:var(--gold)}
+  .durum.disarida{background:rgba(160,170,178,.12);color:#bcc}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .stat{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px;text-align:center}
+  .stat b{display:block;font-size:22px;color:var(--gold)}
+  .stat span{font-size:12px;color:var(--muted)}
+  .row{display:flex;justify-content:space-between;font-size:14px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+  h3{font-size:14px;color:var(--muted);margin:14px 0 8px;text-transform:uppercase;letter-spacing:1px}
+  .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+  .top .lo{font-size:12px;color:var(--muted);background:none;border:0;cursor:pointer}
+</style>
+</head>
+<body>
+  <div class="brand">REPUBLIQUE<small>Personel</small></div>
+  <div id="app"><div class="card"><p class="msg">Yükleniyor…</p></div></div>
+<script>
+(function(){
+  var app=document.getElementById('app');
+  function genKey(){var a='abcdefghijklmnopqrstuvwxyz0123456789',s='';for(var i=0;i<32;i++)s+=a[Math.floor(Math.random()*a.length)];return s;}
+  var dev=localStorage.getItem('pdev_key'); if(!dev){dev=genKey();localStorage.setItem('pdev_key',dev);}
+  function punchToken(){var m=new URLSearchParams(location.search);return m.get('punch');}
+  function esc(s){return String(s==null?'':s).replace(/[<>&]/g,function(c){return({'<':'&lt;','>':'&gt;','&':'&amp;'})[c];});}
+  function hrs(dk){var h=Math.floor(dk/60),m=dk%60;return h+'s '+m+'dk';}
+
+  function loginView(msg,err){
+    app.innerHTML='<div class="card">'
+      +'<input id="ad" placeholder="Adınız" autocomplete="off">'
+      +'<input id="sifre" type="password" placeholder="Şifreniz" autocomplete="off">'
+      +'<button class="btn" id="go">Giriş</button>'
+      +'<p class="msg">İlk girişte şifrenizi kendiniz belirlersiniz. Yeni cihaz yönetici onayı gerektirir.</p>'
+      +(msg?'<p class="msg '+(err?'err':'')+'">'+esc(msg)+'</p>':'')+'</div>';
+    document.getElementById('go').onclick=doLogin;
+    document.getElementById('sifre').addEventListener('keydown',function(e){if(e.key==='Enter')doLogin();});
+  }
+  async function doLogin(){
+    var ad=document.getElementById('ad').value.trim(), sifre=document.getElementById('sifre').value;
+    if(!ad||sifre.length<4){loginView('Ad ve en az 4 haneli şifre girin.',true);return;}
+    var b=document.getElementById('go');b.disabled=true;b.textContent='...';
+    try{
+      var r=await fetch('/api/personel/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ad:ad,sifre:sifre,deviceKey:dev})});
+      var d=await r.json();
+      if(d.ok&&d.bekliyor){app.innerHTML='<div class="card"><div class="durum disarida">Cihaz onayı bekleniyor</div><p class="msg">Yöneticiniz cihazınızı onayladıktan sonra tekrar giriş yapın.</p><button class="btn sec" onclick="location.reload()">Yenile</button></div>';return;}
+      if(d.ok){ boot(); return; }
+      loginView(d.error||'Giriş başarısız',true);
+    }catch(e){loginView('Bağlantı hatası',true);}
+  }
+
+  async function boot(){
+    try{
+      var r=await fetch('/api/personel/me');
+      if(r.status===401){ loginView(); return; }
+      var d=await r.json();
+      if(!d.ok){ loginView(); return; }
+      var pt=punchToken();
+      if(pt){ punchFlow(pt, d); return; }
+      dash(d);
+    }catch(e){ loginView('Bağlantı hatası',true); }
+  }
+
+  function dash(d){
+    var izinKalan=(d.yillikIzin||0)-(d.izinKullanilan||0);
+    var av=(d.avanslar||[]).slice(0,6).map(function(a){return '<div class="row"><span>'+esc((a.tarih||'').slice(0,10))+(a.not_metni?' · '+esc(a.not_metni):'')+'</span><b>'+esc(a.tutar)+' ₺</b></div>';}).join('')||'<p class="msg">Kayıt yok</p>';
+    app.innerHTML='<div class="card"><div class="top"><b>Merhaba, '+esc(d.ad)+'</b><button class="lo" id="lo">Çıkış</button></div>'
+      +'<div class="durum '+d.durum+'">'+({mesai:'Mesaide',mola:'Molada',disarida:'Dışarıda'}[d.durum]||d.durum)+'</div>'
+      +'<button class="btn big" id="scan">QR Okut</button>'
+      +'<p class="msg">Kioskteki QR\'ı telefon kameranızla okutun.</p></div>'
+      +'<div class="card"><div class="grid">'
+      +'<div class="stat"><b>'+hrs(d.bugunDk||0)+'</b><span>bugün</span></div>'
+      +'<div class="stat"><b>'+hrs(d.ayDk||0)+'</b><span>bu ay</span></div>'
+      +'<div class="stat"><b>'+izinKalan+'</b><span>kalan yıllık izin</span></div>'
+      +'<div class="stat"><b>'+((d.avanslar||[]).reduce(function(s,a){return s+Number(a.tutar||0);},0)).toFixed(0)+' ₺</b><span>avans (toplam)</span></div>'
+      +'</div><h3>Son Avanslar</h3>'+av+'</div>';
+    document.getElementById('lo').onclick=async function(){await fetch('/api/personel/logout',{method:'POST'});loginView('Çıkış yapıldı.');};
+    document.getElementById('scan').onclick=function(){
+      app.innerHTML='<div class="card"><div class="durum disarida">Kamerayı açın</div><p class="msg">Telefonunuzun kamera uygulamasıyla kioskteki QR kodunu okutun. İşlem ekranı otomatik açılır.</p><button class="btn sec" onclick="location.reload()">Geri</button></div>';
+    };
+  }
+
+  async function punchFlow(token, me){
+    // once secenekleri al
+    try{
+      var r=await fetch('/api/personel/punch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:token})});
+      var d=await r.json();
+      if(!d.ok){ app.innerHTML='<div class="card"><div class="durum disarida">QR geçersiz</div><p class="msg err">'+esc(d.error||'')+'</p><button class="btn" onclick="location.href=\'/personel\'">Tamam</button></div>'; return; }
+      var opts=d.options||[]; var tr=d.tr||{};
+      var btns=opts.map(function(o){return '<button class="btn big" data-act="'+o+'">'+esc(tr[o]||o)+'</button>';}).join('');
+      app.innerHTML='<div class="card"><div class="durum '+d.durum+'">'+({mesai:'Mesaide',mola:'Molada',disarida:'Dışarıda'}[d.durum]||d.durum)+'</div>'
+        +'<p class="msg">Yapmak istediğiniz işlem:</p>'+btns
+        +'<button class="btn sec" onclick="location.href=\'/personel\'">Vazgeç</button></div>';
+      [].forEach.call(app.querySelectorAll('[data-act]'),function(b){b.onclick=function(){commit(token,b.dataset.act);};});
+    }catch(e){ app.innerHTML='<div class="card"><p class="msg err">Bağlantı hatası</p></div>'; }
+  }
+  async function commit(token, action){
+    try{
+      var r=await fetch('/api/personel/punch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:token,action:action})});
+      var d=await r.json();
+      if(d.ok){ app.innerHTML='<div class="card"><div class="durum '+d.durum+'">'+({mesai:'Mesaide',mola:'Molada',disarida:'Dışarıda'}[d.durum]||d.durum)+'</div><p class="msg">İşlem kaydedildi ✓ Bugün: '+hrs(d.bugunDk||0)+'</p><button class="btn" onclick="location.href=\'/personel\'">Tamam</button></div>'; }
+      else { app.innerHTML='<div class="card"><p class="msg err">'+esc(d.error||'Hata')+'</p><button class="btn" onclick="location.href=\'/personel\'">Tamam</button></div>'; }
+    }catch(e){ app.innerHTML='<div class="card"><p class="msg err">Bağlantı hatası</p></div>'; }
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>
