@@ -48,6 +48,48 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --- Admin Basic Auth (ayni /secrets/adminpw sifresi; ayarli degilse ACIK) ---
+import base64, time
+_ADMIN_PW_CACHE = {"v": None, "t": 0.0}
+
+def _get_admin_pw():
+    now = time.time()
+    if now - _ADMIN_PW_CACHE["t"] < 10:
+        return _ADMIN_PW_CACHE["v"]
+    pw = os.environ.get("ADMINPW") or os.environ.get("ADMIN_PASSWORD")
+    try:
+        if os.path.exists("/secrets/adminpw"):
+            with open("/secrets/adminpw") as f:
+                s = f.read().strip()
+                if s:
+                    pw = s
+    except Exception:
+        pass
+    _ADMIN_PW_CACHE["v"] = pw
+    _ADMIN_PW_CACHE["t"] = now
+    return pw
+
+@app.middleware("http")
+async def admin_auth(request, call_next):
+    if request.method == "OPTIONS":
+        return await call_next(request)
+    pw = _get_admin_pw()
+    if pw:
+        auth = request.headers.get("authorization", "")
+        ok = False
+        if auth.startswith("Basic "):
+            try:
+                dec = base64.b64decode(auth[6:]).decode("utf-8")
+                _, _, p = dec.partition(":")
+                ok = (p == pw)
+            except Exception:
+                ok = False
+        if not ok:
+            return Response(status_code=401,
+                            headers={"WWW-Authenticate": 'Basic realm="Republique Yonetim"'},
+                            content="Yetkilendirme gerekli.")
+    return await call_next(request)
+
 def get_db():
     db = SessionLocal()
     try:
