@@ -115,7 +115,7 @@ app.get("/health", (req, res) => {
 });
 
 // Admin alt-URL'ler: her bolum kendi adresinde (deep-link/refresh calisir). Shell (index.html) sunulur.
-app.get(["/admin", "/admin/canli", "/admin/rapor", "/admin/sohbetler", "/admin/audit", "/admin/reklam", "/admin/cari"], (req, res) => {
+app.get(["/admin", "/admin/canli", "/admin/rapor", "/admin/sohbetler", "/admin/gorusler", "/admin/personel", "/admin/audit", "/admin/reklam", "/admin/cari"], (req, res) => {
   res.sendFile(path.join(__dirname, "public", "admin", "index.html"));
 });
 
@@ -462,6 +462,11 @@ app.post("/api/admin/ads/approve-suggestion", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// === EK MODULLER ===
+// Modul 1: musteri uyelik + geri bildirim  |  Modul 5: personel mesai (kiosk QR)
+require("./src/feedback").register(app, db);
+require("./src/personel").register(app, db);
 
 app.listen(PORT, "0.0.0.0", async () => {
   console.log("Republique app listening on " + PORT);
