@@ -271,14 +271,15 @@ function sanitizeReply(t) {
 // ANTHROPIC (Claude) cagrisi
 let _lastUsage = null;
 async function callAnthropic(system, msgs, apiKey, dynamicHint) {
-  // Ana sistem blogu CACHE'lenir (sabit -> ucuz). Dinamik ipucu (rotasyon) AYRI, cache'siz kucuk blok.
-  const sys = [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }];
+  // Ana sistem blogu 1 SAAT CACHE'lenir -> yogun saatte tum misafirler menuyu PAYLASIR (ilki yazar, gerisi ucuz okur).
+  // Dinamik ipucu (rotasyon) AYRI, cache'siz kucuk blok.
+  const sys = [{ type: 'text', text: system, cache_control: { type: 'ephemeral', ttl: '1h' } }];
   if (dynamicHint) sys.push({ type: 'text', text: dynamicHint });
   const resp = await axios.post('https://api.anthropic.com/v1/messages', {
     model: MODEL, max_tokens: 320,
     system: sys,
     messages: msgs
-  }, { headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' }, timeout: 20000 });
+  }, { headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-beta': 'extended-cache-ttl-2025-04-11', 'content-type': 'application/json' }, timeout: 20000 });
   _lastUsage = (resp.data && resp.data.usage) || null;
   if (resp.data && Array.isArray(resp.data.content)) return resp.data.content.map(c => c.text || '').join('').trim();
   return '';
