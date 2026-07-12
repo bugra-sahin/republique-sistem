@@ -108,6 +108,11 @@ app.get("/health", (req, res) => {
   res.json({ ok: true, service: "republique", time: new Date().toISOString() });
 });
 
+// Admin alt-URL'ler: her bolum kendi adresinde (deep-link/refresh calisir). Shell (index.html) sunulur.
+app.get(["/admin", "/admin/canli", "/admin/rapor", "/admin/sohbetler", "/admin/audit", "/admin/reklam", "/admin/cari"], (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "admin", "index.html"));
+});
+
 // Genel menu (masa parametresiz) - reklamlar buraya yonlendirir; ziyaretci utm/fbclid ile "reklamdan gelen" olarak takip edilir
 // Kanonik masa seti (PionPOS ile birebir): gecersiz masa URL'si sade /menu'ya yonlendirilir
 const VALID_TABLES = new Set();
