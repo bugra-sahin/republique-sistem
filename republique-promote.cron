@@ -1,0 +1,3 @@
+# Republique gece terfi: her gece 03:01'de test2 saglikliysa test1'e al
+# Kurulum: cp /opt/republique/republique-promote.cron /etc/cron.d/republique-promote
+1 3 * * * root /bin/sh /opt/republique/promote.sh
