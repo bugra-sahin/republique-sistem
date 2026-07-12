@@ -39,6 +39,15 @@ function rateLimited(key) {
 function istNow() { return new Date(Date.now() + 3 * 3600 * 1000); }
 // ms (gun ici) -> "HH:MM"
 function fmtHour(ms) { const t = Math.floor((ms || 0) / 1000); const h = Math.floor(t / 3600) % 24; const m = Math.floor((t % 3600) / 60); return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0'); }
+// PionPOS duzeltilemeyen "gece" penceresi: 22:00+ baslayip 23:xx'te biten (gunici) pencereyi 01:00'e uzat.
+// (Bugra: shot indirimi 23:00-23:59 girilmis ama 23:00-01:00 olmali; PionPOS 00:00/01:00 kabul etmiyor.)
+const _22h = 79200000, _23h = 82800000, _24h = 86400000, _01h = 3600000;
+function normHH(hh) {
+  if (hh && hh.startHour >= _22h && hh.startHour <= hh.endHour && hh.endHour >= _23h && hh.endHour < _24h) {
+    return Object.assign({}, hh, { endHour: _01h }); // gece yarisini gecen 01:00
+  }
+  return hh;
+}
 // Urunun SU ANKI gecerli fiyati (happy-hour penceresi aktifse indirimli, degilse temel). app.js getActivePrice ile birebir.
 function currentPrice(p) {
   const base = p.price;
@@ -48,8 +57,9 @@ function currentPrice(p) {
   const isoDay = jsDay === 0 ? 7 : jsDay;   // 1=Pzt..7=Paz
   const pazarDay = jsDay + 1;               // 1=Paz..7=Cmt
   const curMs = (now.getUTCHours() * 3600 + now.getUTCMinutes() * 60 + now.getUTCSeconds()) * 1000;
-  for (const hh of p.happyHourInfo) {
-    if (!hh.active) continue;
+  for (const raw of p.happyHourInfo) {
+    if (!raw.active) continue;
+    const hh = normHH(raw);
     const d = hh.days || [];
     if (!(d.includes(jsDay) || d.includes(isoDay) || d.includes(pazarDay))) continue;
     if (hh.startHour <= hh.endHour) { if (curMs >= hh.startHour && curMs <= hh.endHour) return hh.price; }
@@ -107,7 +117,7 @@ function flattenMenu(menu) {
           price = `${cp}₺`;
           // Su an happy-hour indirimliyse: normal fiyat + indirim + saat penceresi
           if (p.price != null && cp < p.price) {
-            const act = (p.happyHourInfo || []).filter(hh => hh && hh.active);
+            const act = (p.happyHourInfo || []).filter(hh => hh && hh.active).map(normHH);
             const wins = [...new Set(act.map(hh => `${fmtHour(hh.startHour)}-${fmtHour(hh.endHour)}`))];
             const disc = (act.find(hh => hh.discount) || {}).discount;
             price += ` [normal ${p.price}₺, happy hour${disc ? ' %' + disc : ''} indirimli, saatler ${wins.join(' ve ')}]`;
