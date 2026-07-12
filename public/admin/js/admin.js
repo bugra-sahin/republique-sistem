@@ -17,8 +17,39 @@ document.addEventListener('DOMContentLoaded', () => {
       if (targetId === 'tab-live') fetchLiveScans();
       else if (targetId === 'tab-ads') fetchAdsManager();
       else if (targetId === 'tab-chats') fetchChatLogs();
+      else if (targetId === 'tab-audit') fetchAuditLog();
     });
   });
+
+  // Audit / islem kayitlari
+  const auditDaysEl = document.getElementById('auditDaysFilter');
+  if (auditDaysEl) auditDaysEl.addEventListener('change', fetchAuditLog);
+  async function fetchAuditLog() {
+    const tbody = document.querySelector('#auditTable tbody');
+    if (!tbody) return;
+    const days = (document.getElementById('auditDaysFilter') || {}).value || '30';
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color: var(--text-secondary);">Yükleniyor...</td></tr>';
+    try {
+      const r = await fetch('/api/admin/audit-log?days=' + days);
+      const d = await r.json();
+      const rows = (d && d.kayitlar) || [];
+      if (!rows.length) { tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color: var(--text-secondary);">Bu dönemde kayıt yok.</td></tr>'; return; }
+      const esc = s => String(s == null ? '' : s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+      tbody.innerHTML = rows.map(row => {
+        const dt = new Date(row.ts);
+        const saat = isNaN(dt) ? '' : dt.toLocaleString('tr-TR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+        return '<tr>' +
+          '<td style="white-space:nowrap;">' + esc(saat) + '</td>' +
+          '<td style="white-space:nowrap;">' + esc(row.method) + '</td>' +
+          '<td>' + esc(row.path) + '</td>' +
+          '<td style="white-space:nowrap;">' + esc(row.ip) + '</td>' +
+          '<td style="color: var(--text-secondary); max-width:280px; overflow:hidden; text-overflow:ellipsis;">' + esc(row.body_summary) + '</td>' +
+        '</tr>';
+      }).join('');
+    } catch (e) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#e57373;">Kayıtlar alınamadı: ' + e.message + '</td></tr>';
+    }
+  }
 
   // AI Sohbet kayitlari
   const chatDaysEl = document.getElementById('chatDaysFilter');
@@ -564,7 +595,7 @@ document.addEventListener('DOMContentLoaded', () => {
 (function(){
   function openFromHash(){
     var h=(location.hash||'').replace('#','').toLowerCase();
-    var map={ads:'tab-ads',reports:'tab-reports',live:'tab-live',upload:'tab-upload',chats:'tab-chats'};
+    var map={ads:'tab-ads',reports:'tab-reports',live:'tab-live',upload:'tab-upload',chats:'tab-chats',audit:'tab-audit'};
     if(map[h]){ var b=document.querySelector('.tab-btn[data-tab="'+map[h]+'"]'); if(b) b.click(); }
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', openFromHash); else openFromHash();
