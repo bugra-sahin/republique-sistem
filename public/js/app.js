@@ -230,28 +230,29 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function setupScrollSpy() {
-    window.addEventListener('scroll', () => {
+    // ONEMLI: Eski surum her scroll olayinda smooth scrollIntoView cagiriyordu ->
+    // scroll<->smooth-scroll geri besleme dongusu ana thread'i kilitliyor, iOS Safari
+    // sekmeyi olduruyordu ("sayfada bircok kez sorun olustu"). Cozum: rAF ile throttle
+    // + YALNIZCA aktif kategori DEGISTIGINDE DOM guncelle ve nav'i kaydir.
+    let ticking = false;
+    let lastActiveId = null;
+    function update() {
+      ticking = false;
       let currentActive = categoryElements[0];
-      
       for (const cat of categoryElements) {
         const el = document.getElementById(cat.id);
-        if (el) {
-          const rect = el.getBoundingClientRect();
-          // Eğer bölümün üst kısmı ekranda görünür hale geldiyse
-          if (rect.top <= 100) {
-            currentActive = cat;
-          }
-        }
+        if (el && el.getBoundingClientRect().top <= 100) currentActive = cat;
       }
-
-      // Aktif sınıfını güncelle ve scroll et
-      categoryElements.forEach(cat => cat.btn.classList.remove('active'));
-      if (currentActive) {
+      if (currentActive && currentActive.id !== lastActiveId) {
+        lastActiveId = currentActive.id;
+        categoryElements.forEach(cat => cat.btn.classList.remove('active'));
         currentActive.btn.classList.add('active');
-        // Aktif butonu görünür alana kaydır
-        currentActive.btn.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+        try { currentActive.btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' }); } catch (e) {}
       }
-    });
+    }
+    window.addEventListener('scroll', () => {
+      if (!ticking) { ticking = true; requestAnimationFrame(update); }
+    }, { passive: true });
   }
 
   initTracking();
