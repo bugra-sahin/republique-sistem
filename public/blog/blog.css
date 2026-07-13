@@ -1,0 +1,33 @@
+/* Republique blog makale teması — site ile uyumlu (koyu/altın), okunur tipografi */
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Playfair+Display:ital,wght@0,600;1,600&display=swap');
+:root{--bg:#05100c;--panel:#0a1f16;--line:rgba(212,175,55,.18);--ink:#eef1ef;--muted:#a0aab2;--gold:#d4af37}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:'Outfit',system-ui,-apple-system,sans-serif;margin:0;line-height:1.7;font-size:17px}
+/* ust bar (route ile enjekte edilir) */
+.rq-blogbar{position:sticky;top:0;z-index:10;display:flex;align-items:center;justify-content:space-between;
+  background:rgba(5,16,12,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:12px 18px}
+.rq-blogbar .rq-logo{font-family:'Playfair Display',serif;font-size:20px;color:var(--gold);letter-spacing:.5px;text-decoration:none}
+.rq-blogbar .rq-links a{color:var(--muted);text-decoration:none;font-size:14px;margin-left:16px}
+.rq-blogbar .rq-links a:hover{color:var(--gold)}
+article{max-width:720px;margin:0 auto;padding:22px 20px 60px}
+article nav[aria-label="breadcrumb"]{font-size:13px;color:var(--muted);margin-bottom:14px}
+article nav[aria-label="breadcrumb"] a{color:var(--gold);text-decoration:none}
+article h1{font-family:'Playfair Display',serif;font-size:30px;line-height:1.25;color:#fff;margin:6px 0 8px}
+article h2{font-size:21px;color:var(--gold);margin:30px 0 10px}
+article h3{font-size:18px;color:#fff;margin:22px 0 8px}
+article p{margin:0 0 15px}
+article em{color:var(--muted)}
+article strong{color:#fff}
+article a{color:var(--gold)}
+article ul,article ol{margin:0 0 16px;padding-left:22px}
+article li{margin-bottom:7px}
+article hr{border:0;border-top:1px solid var(--line);margin:26px 0}
+article small{color:var(--muted);font-size:13px;line-height:1.6}
+/* "Bunları biliyor muydunuz?" kutusu (inline stille geliyor, uyumlu hale getir) */
+article > div[style*="border-left"]{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--gold) !important;
+  border-radius:12px;padding:16px 18px !important;margin:24px 0 !important}
+article > div[style*="border-left"] h2{margin-top:0;font-size:17px}
+/* alt CTA */
+.rq-blogfoot{max-width:720px;margin:0 auto;padding:0 20px 50px;color:var(--muted);font-size:14px;text-align:center}
+.rq-blogfoot a{color:var(--gold);text-decoration:none}
+@media(max-width:600px){article h1{font-size:25px}body{font-size:16px}}
