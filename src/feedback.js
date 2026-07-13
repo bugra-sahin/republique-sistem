@@ -109,12 +109,20 @@ function register(app, db) {
          VALUES ($1,$2,$3,$4,$5,'yeni') RETURNING id`,
         [repId, masa || null, String(kaynak || "menu").slice(0, 30), text, tip]
       );
-      // Yaniti tipe gore sekillendir (review-gating YOK; Google linki her tipe donuyor)
+      // TEKRAR GELEN mi? (bu rep_id 6 saatten onceki bir ziyaret yapmis -> daha once gelmis)
+      // Google yorum daveti YALNIZCA tekrar gelene ve OLUMSUZ olmayana gosterilir (Bugra karari).
+      let tekrarGelen = false;
+      try {
+        if (repId) { const rr = await db.query("SELECT 1 FROM scans WHERE rep_id=$1 AND timestamp < now() - interval '6 hours' LIMIT 1", [repId]); tekrarGelen = rr.rows.length > 0; }
+      } catch (e) {}
+      const googleDavet = tekrarGelen && tip !== "olumsuz";
       res.json({
-        ok: true, id: rows[0].id, tip,
+        ok: true, id: rows[0].id, tip, tekrarGelen, googleDavet,
         mesaj: tip === "olumsuz"
           ? "Bu deneyim icin cok uzgunuz. Ekibimiz en kisa surede sizinle ilgilenecek — dilerseniz masanizdan bir personelimizi cagirabilirsiniz."
-          : "Gorusunuz icin cok tesekkurler! Bizi Google'da degerlendirmek isterseniz cok memnun oluruz."
+          : (googleDavet
+              ? "Tekrar aramizda oldugunuz icin tesekkurler! Bizi Google'da degerlendirmek isterseniz cok memnun oluruz."
+              : "Gorusunuz icin cok tesekkurler, not ettik!")
       });
     } catch (e) { console.error("/api/feedback:", e.message); res.status(500).json({ ok: false, error: "Gonderilemedi." }); }
   });
