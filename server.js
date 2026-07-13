@@ -171,14 +171,37 @@ app.get("/blog/:slug", (req, res) => {
   for (const c of [slug + ".html", "blog-" + slug + ".html"]) {
     const f = path.join(dir, c);
     if (fs.existsSync(f)) {
-      // Makale HTML'leri stilsiz (duz beyaz). 19 dosyaya dokunmadan, sunumda
-      // site temasini (koyu/altin) enjekte et: CSS link + ust bar + alt CTA.
+      // 19 makaleye tek tek dokunmadan sunumda: isim duzeltme + tema + iç link + Maps + schema enjekte et.
       let html = fs.readFileSync(f, "utf8");
-      const bar = '<div class="rq-blogbar"><a class="rq-logo" href="/">Republique</a>' +
+      const curSlug = c.replace(/^blog-/, "").replace(/\.html$/, "");
+      // 1) Isim: her yerde "Republique Tunalı"
+      html = html.replace(/Republique Social House/g, "Republique Tunalı");
+      // 2) Restaurant/LocalBusiness JSON-LD (yerel SEO) — NAP + menu + Maps
+      const rest = '<script type="application/ld+json">' + JSON.stringify({
+        "@context": "https://schema.org", "@type": "Restaurant", "name": "Republique Tunalı",
+        "servesCuisine": ["Cocktail bar", "Pub", "Restaurant"], "priceRange": "₺₺",
+        "telephone": "+905526565159", "url": "https://republique.tr", "hasMenu": "https://menu.republique.tr",
+        "image": "https://republique.tr/logo.png",
+        "address": { "@type": "PostalAddress", "streetAddress": "Bestekar Cd 65/B, Remzi Oğuz Arık Mah.", "addressLocality": "Çankaya", "addressRegion": "Ankara", "postalCode": "06060", "addressCountry": "TR" },
+        "hasMap": "https://share.google/rJCHpjDGK456xl63a",
+        "openingHoursSpecification": [{ "@type": "OpeningHoursSpecification", "dayOfWeek": ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"], "opens": "12:00", "closes": "01:00" }]
+      }) + '</script>';
+      // 3) Ic link (ilgili yazilar) + Maps + menu CTA — footer'da
+      const ilgili = [
+        ["kokteyl-cesitleri", "Kokteyl çeşitleri"], ["klasik-kokteyller", "Klasik kokteyller"],
+        ["alkolsuz-kokteyller", "Alkolsüz kokteyller"], ["viski-nasil-icilir", "Viski nasıl içilir"],
+        ["sarap-yemek-uyumu", "Şarap & yemek uyumu"], ["tunali-nerede-yenir", "Tunalı'da nerede yenir"],
+        ["cankaya-restoran-rehberi", "Çankaya restoran rehberi"], ["ankara-ozel-gun-mekani", "Ankara özel gün mekânı"]
+      ].filter(x => x[0] !== curSlug).slice(0, 5)
+        .map(x => '<a href="/blog/' + x[0] + '">' + x[1] + '</a>').join(" · ");
+      const bar = '<div class="rq-blogbar"><a class="rq-logo" href="/">Republique Tunalı</a>' +
         '<span class="rq-links"><a href="/blog">Blog</a><a href="/menu">Menü</a></span></div>';
-      const foot = '<div class="rq-blogfoot"><hr>Republique Social House · Tunalı Hilmi, Çankaya · ' +
-        '<a href="/blog">Tüm yazılar</a> · <a href="/menu">Menüyü aç</a></div>';
-      if (html.includes("</head>")) html = html.replace("</head>", '<link rel="stylesheet" href="/blog/blog.css"></head>');
+      const foot = '<div class="rq-blogfoot"><hr>'
+        + '<div style="margin-bottom:10px">İlgili yazılar: ' + ilgili + '</div>'
+        + 'Republique Tunalı · Bestekar Cd 65/B, Çankaya/Ankara · '
+        + '<a href="https://share.google/rJCHpjDGK456xl63a" target="_blank" rel="noopener">Google Maps\'te yol tarifi</a> · '
+        + '<a href="/menu">Menüyü aç</a> · <a href="/blog">Tüm yazılar</a></div>';
+      if (html.includes("</head>")) html = html.replace("</head>", '<link rel="stylesheet" href="/blog/blog.css">' + rest + '</head>');
       if (/<body[^>]*>/.test(html)) html = html.replace(/<body[^>]*>/, (m) => m + bar);
       else html = bar + html;
       if (html.includes("</body>")) html = html.replace("</body>", foot + "</body>");
@@ -206,6 +229,15 @@ app.post("/api/chat", async (req, res) => {
     const repId = (req.cookies && req.cookies.rep_id) || null;
     const ip = (req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0].trim();
     const result = await chatWithWaiter({ message, repId, ip, history, table });
+    // AI garson bir GORUS topladiysa ([[GORUS:]]) kaydet + tekrar gelene Google daveti ekle.
+    if (result && result.gorus) {
+      try {
+        const fb = await require("./src/feedback").kaydetGorus(db, { metin: result.gorus, repId, masa: table, kaynak: "ai-garson" });
+        if (fb && fb.ok) { result.gorusKaydedildi = true; result.gorusTip = fb.tip; result.googleDavet = fb.googleDavet;
+          if (fb.googleDavet) result.googleUrl = "https://g.page/r/CXmH-0MBy7JKEBM/review"; }
+      } catch (e) { console.error("gorus kaydet:", e.message); }
+      delete result.gorus;
+    }
     res.json(result);
     // Sohbeti kaydet (yalnizca gercek yanitlari)
     if (result && result.ok && !result.queued && !result.notable && result.reply && message) {
@@ -589,6 +621,7 @@ app.post("/api/admin/ads/approve-suggestion", async (req, res) => {
 // Modul 1: musteri uyelik + geri bildirim  |  Modul 5: personel mesai (kiosk QR)
 require("./src/feedback").register(app, db);
 require("./src/personel").register(app, db);
+require("./src/uyelik").register(app, db);
 
 app.listen(PORT, "0.0.0.0", async () => {
   console.log("Republique app listening on " + PORT);
