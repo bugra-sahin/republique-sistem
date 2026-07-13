@@ -222,17 +222,6 @@ app.get("/api/menu", (req, res) => {
   }
 });
 
-// GOOGLE-OKUR MENU: /menu JS-render oldugu icin Google/bot menuyu okuyamaz. Bu route menuyu
-// DUZ METIN olarak sunar (crawlable) -> arama/GBP menu icerigi + AI platformlari icin. Ayni veri.
-app.get("/menu.txt", (req, res) => {
-  const menu = getCachedMenu();
-  res.set("Content-Type", "text/plain; charset=utf-8");
-  if (!menu) return res.status(503).send("Menu henuz hazir degil.");
-  const bas = "Republique Tunalı — Menü\nBestekar Cd 65/B, Remzi Oğuz Arık Mah., Çankaya/Ankara\nTel: +90 552 656 51 59 · https://republique.tr/menu\nFiyatlar güncel (POS ile senkron). Kokteyl bar, geniş yemek ve içecek menüsü.\n\n";
-  // flattenMenu LLM'e ozel koseli-parantez notlarini temizle (Google icin sade metin)
-  let govde = flattenMenu(menu).replace(/\s*\[normal[^\]]*\]/g, "").replace(/\s*\[[^\]]*happy hour[^\]]*\]/gi, "");
-  res.send(bas + govde);
-});
 
 // ============ REPUBLIQUE AI GARSON ============
 app.post("/api/chat", async (req, res) => {
