@@ -571,9 +571,19 @@ document.addEventListener('DOMContentLoaded', () => {
         data.forEach(scan => {
           const dateObj = new Date(scan.timestamp);
           const timeString = dateObj.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
-          let sourceBadge = (scan.fbclid || scan.utm_source === 'facebook' || scan.utm_source === 'ig') 
-            ? `<span class="badge ads">REKLAM (${scan.utm_campaign || 'Bilinmiyor'})</span>` 
-            : `<span class="badge organic">ORGANİK</span>`;
+          // Kaynak turu: yeni kaynak_tur kolonu (5 tip) oncelikli; yoksa eski fbclid yedegi.
+          const kt = scan.kaynak_tur || ((scan.fbclid || scan.utm_source === 'facebook' || scan.utm_source === 'ig') ? 'reklam' : 'dogrudan');
+          const ktMap = {
+            reklam:  { cls:'ads',     txt:'REKLAM' + (scan.utm_campaign ? ' (' + scan.utm_campaign + ')' : '') },
+            organik: { cls:'organic', txt:'ORGANİK (arama)' },
+            sosyal:  { cls:'organic', txt:'SOSYAL' },
+            referans:{ cls:'organic', txt:'REFERANS' },
+            dogrudan:{ cls:'organic', txt:'DOĞRUDAN (QR/link)' }
+          };
+          const info = ktMap[kt] || ktMap.dogrudan;
+          let sourceBadge = `<span class="badge ${info.cls}">${info.txt}</span>`;
+          // Tekrar gelen misafir rozeti (daha once >6 saat once gelmis)
+          if (scan.tekrar_gelen) sourceBadge += ` <span class="badge" style="background:#8a5cf6;color:#fff">TEKRAR GELEN</span>`;
           const isMobile = scan.user_agent && scan.user_agent.toLowerCase().includes('mobi') ? '📱 Mobil' : '💻 Masaüstü';
 
           const tr = document.createElement('tr');
