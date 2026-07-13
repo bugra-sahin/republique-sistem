@@ -42,6 +42,8 @@
   window.raiShowProduct=function(name){
     try{
       const target=norm(name); if(!target)return false;
+      // Tembel-render: urun cizilmemis bir kategoride olabilir -> once TUMUNU doldur, sonra ara.
+      if(typeof window.raiFillAll==='function'){ try{ window.raiFillAll(); }catch(e){} }
       const cards=[...document.querySelectorAll('.product-card')];
       let card=cards.find(c=>{const n=c.querySelector('.product-name');return n&&norm(n.textContent)===target;});
       if(!card) card=cards.find(c=>{const n=c.querySelector('.product-name');return n&&(norm(n.textContent).includes(target)||target.includes(norm(n.textContent)));});

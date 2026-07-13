@@ -235,6 +235,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (pending[0]) fillCategory(pending[0].catSection, pending[0].category);
     if (pending[1]) fillCategory(pending[1].catSection, pending[1].category);
 
+    // AI [[SHOW:Urun]] icin: bir urun kartini bulmadan once TUM kategorileri doldur
+    // (tembel-render yuzunden cizilmemis kategorideki urun bulunamiyordu -> Thunderbolt hatasi).
+    window.raiFillAll = function () { pending.forEach(p => fillCategory(p.catSection, p.category)); };
+
     setupScrollSpy();
   }
 
