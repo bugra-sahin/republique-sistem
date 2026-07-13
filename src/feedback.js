@@ -56,6 +56,21 @@ async function classify(text) {
   return "notr";
 }
 
+// Gorusu kaydet + tip siniflandir + googleDavet karari. Hem /api/feedback hem AI garson ([[GORUS:]]) kullanir.
+async function kaydetGorus(db, { metin, repId, masa, kaynak }) {
+  const text = String(metin || "").slice(0, 2000).trim();
+  if (text.length < 2) return { ok: false, error: "bos" };
+  const tip = await classify(text);
+  const { rows } = await db.query(
+    `INSERT INTO geri_bildirimler (rep_id, masa, kaynak, metin, tip, durum) VALUES ($1,$2,$3,$4,$5,'yeni') RETURNING id`,
+    [repId || null, masa || null, String(kaynak || "menu").slice(0, 30), text, tip]
+  );
+  let tekrarGelen = false;
+  try { if (repId) { const rr = await db.query("SELECT 1 FROM scans WHERE rep_id=$1 AND timestamp < now() - interval '6 hours' LIMIT 1", [repId]); tekrarGelen = rr.rows.length > 0; } } catch (e) {}
+  const googleDavet = tekrarGelen && tip !== "olumsuz";
+  return { ok: true, id: rows[0].id, tip, tekrarGelen, googleDavet };
+}
+
 function register(app, db) {
   // Tablolar
   // Tablo ve unique index SIRALI olusturulmali (index tablodan sonra) — aksi halde ON CONFLICT calismaz
@@ -169,4 +184,4 @@ function register(app, db) {
   });
 }
 
-module.exports = { register, classify, normPhone };
+module.exports = { register, classify, normPhone, kaydetGorus };
