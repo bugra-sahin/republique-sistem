@@ -339,7 +339,7 @@ app.post("/api/track", async (req, res) => {
     let tekrar_gelen = false;
     try {
       const r = await db.query(
-        "SELECT 1 FROM scans WHERE rep_id = $1 AND created_at < now() - interval '6 hours' LIMIT 1", [rep_id]);
+        "SELECT 1 FROM scans WHERE rep_id = $1 AND timestamp < now() - interval '6 hours' LIMIT 1", [rep_id]);
       tekrar_gelen = r.rowCount > 0;
     } catch (e) { /* kolon/tablo yoksa sessizce gec */ }
     await db.query(
@@ -383,7 +383,7 @@ app.get("/api/admin/attribution", async (req, res) => {
               COUNT(*)::int AS toplam,
               COUNT(*) FILTER (WHERE tekrar_gelen)::int AS tekrar
        FROM scans
-       WHERE created_at >= now() - ($1||' days')::interval
+       WHERE timestamp >= now() - ($1||' days')::interval
        GROUP BY 1 ORDER BY 2 DESC`, [String(days)]);
     const toplam = rows.reduce((a, r) => a + r.toplam, 0);
     const tekrarToplam = rows.reduce((a, r) => a + r.tekrar, 0);
