@@ -235,9 +235,24 @@ document.addEventListener('DOMContentLoaded', () => {
     if (pending[0]) fillCategory(pending[0].catSection, pending[0].category);
     if (pending[1]) fillCategory(pending[1].catSection, pending[1].category);
 
-    // AI [[SHOW:Urun]] icin: bir urun kartini bulmadan once TUM kategorileri doldur
-    // (tembel-render yuzunden cizilmemis kategorideki urun bulunamiyordu -> Thunderbolt hatasi).
-    window.raiFillAll = function () { pending.forEach(p => fillCategory(p.catSection, p.category)); };
+    // AI [[SHOW:Urun]] icin: SADECE o urunun kategorisini doldur (413 kartin HEPSINI birden cizmek
+    // dusuk-bellekli iPhone'da sekmeyi cokertiyordu -> "isterim/gin severim" sonrasi sayfa yenileniyordu).
+    function _norm(x){return String(x||'').toLowerCase().replace(/ı/g,'i').replace(/İ/g,'i').replace(/ş/g,'s').replace(/ğ/g,'g').replace(/ü/g,'u').replace(/ö/g,'o').replace(/ç/g,'c').replace(/[^a-z0-9]/g,'');}
+    window.raiFillForProduct = function (name) {
+      const t = _norm(name); if (!t) return false;
+      for (const p of pending) {
+        let hit = false;
+        for (const s of (p.category.sections || [])) {
+          for (const pr of (s.products || [])) {
+            const nm = _norm(pr && pr.name);
+            if (nm && (nm === t || nm.includes(t) || t.includes(nm))) { hit = true; break; }
+          }
+          if (hit) break;
+        }
+        if (hit) { fillCategory(p.catSection, p.category); return true; }
+      }
+      return false;
+    };
 
     setupScrollSpy();
   }

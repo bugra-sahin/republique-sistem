@@ -91,9 +91,17 @@ function getAdminPw() {
 }
 function adminAuth(req, res, next) {
   const pw = getAdminPw();
-  if (!pw) return next();
   const p = req.path || "";
-  if (!(p === "/admin" || p.startsWith("/admin/") || p.startsWith("/api/admin"))) return next();
+  const isAdmin = (p === "/admin" || p.startsWith("/admin/") || p.startsWith("/api/admin"));
+  if (!isAdmin) return next(); // menu/AI/track herkese acik
+  // FAIL-CLOSED (guvenlik): admin sifresi AYARLI DEGILSE admin yollarini ASLA acik birakma.
+  // Eski "if(!pw) return next()" fail-OPEN idi -> sifre dusmeyince /api/admin musteri PII'sini
+  // (IP, fbp, cihaz, masa) internete siziyordu. Artik sifre yoksa 503 ile KAPALI.
+  if (!pw) {
+    console.error("GUVENLIK UYARISI: admin sifresi ayarli degil -> /admin ve /api/admin KAPATILDI (503). Cozum: /secrets/llm.env'e 'ADMINPW=...' ekleyip 'docker compose restart app'.");
+    res.set("WWW-Authenticate", 'Basic realm="Republique Yonetim"');
+    return res.status(503).send("Yonetim paneli, sifre yapilandirilana kadar kapali.");
+  }
   const hdr = req.headers.authorization || "";
   const m = hdr.match(/^Basic\s+(.+)$/i);
   if (m) {
