@@ -1,8 +1,8 @@
 // MODUL 1 (frontend): "Gorus Bildir" + opsiyonel uyelik. Menu ASLA kayit zorlamaz.
 // Google degerlendirme linki HERKESE gosterilir (review-gating YOK). Olumsuzda once iceride telafi.
 (function () {
-  // ==== AYAR: gercek Google degerlendirme linkini buraya koy (Bugra saglayacak) ====
-  var GOOGLE_REVIEW_URL = "https://search.google.com/local/writereview?placeid=REPUBLIQUE_PLACE_ID";
+  // Gercek Google degerlendirme linki (Bugra verdi)
+  var GOOGLE_REVIEW_URL = "https://g.page/r/CXmH-0MBy7JKEBM/review";
 
   function getCookie(n){var v='; '+document.cookie;var p=v.split('; '+n+'=');if(p.length===2)return p.pop().split(';').shift();return null;}
   function getTable(){var p=new URLSearchParams(location.search);var t=p.get('masa')||p.get('table');
@@ -58,9 +58,9 @@
         if(d.ok){
           o.querySelector('#rfText').style.display='none';
           this.style.display='none';
-          var g='<a class="rf-gbtn" href="'+GOOGLE_REVIEW_URL+'" target="_blank" rel="noopener">Google\'da değerlendir</a>';
+          // Google daveti YALNIZCA tekrar gelen misafire ve olumsuz olmayan geri bildirimde (backend karar verir).
+          var g = d.googleDavet ? '<a class="rf-gbtn" href="'+GOOGLE_REVIEW_URL+'" target="_blank" rel="noopener">Google\'da değerlendir</a>' : '';
           res.innerHTML='<p style="color:#f5f5f5;margin:8px 0 4px">'+esc(d.mesaj)+'</p>'
-            + (d.tip==='olumsuz' ? '<div class="rf-note">Değerlendirme yapmak isterseniz aşağıdaki bağlantı her zaman açık:</div>' : '')
             + g
             +'<button class="rf-btn sec" data-close2>Kapat</button>';
           res.querySelector('[data-close2]').onclick=function(){o.classList.remove('show');};

@@ -209,7 +209,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 pCard.innerHTML = `
-                  <img src="${imgSrc}" class="product-img" alt="${item.name}" loading="lazy" onerror="this.src='${defaultImg}'">
+                  <img src="${imgSrc}" class="product-img" alt="${item.name}" loading="lazy" decoding="async" onerror="this.src='${defaultImg}'">
                   <div class="product-info">
                     <div class="product-name">${item.name}</div>
                     <div class="product-desc">${item.description || ''}</div>
