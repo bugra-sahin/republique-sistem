@@ -30,6 +30,11 @@ db.query(`CREATE TABLE IF NOT EXISTS client_logs (
   id SERIAL PRIMARY KEY, tip TEXT, mesaj TEXT, kaynak TEXT, stack TEXT, url TEXT, masa TEXT, ua TEXT, ip TEXT, created_at TIMESTAMPTZ DEFAULT now()
 )`).catch(e => console.error("client_logs tablo:", e.message));
 
+// Trafik atifi: scans tablosuna kaynak turu + referrer + tekrar-gelen bayragi ekle (varsa atla).
+db.query("ALTER TABLE scans ADD COLUMN IF NOT EXISTS kaynak_tur TEXT").catch(e => console.error("scans kaynak_tur:", e.message));
+db.query("ALTER TABLE scans ADD COLUMN IF NOT EXISTS referrer TEXT").catch(e => console.error("scans referrer:", e.message));
+db.query("ALTER TABLE scans ADD COLUMN IF NOT EXISTS tekrar_gelen BOOLEAN").catch(e => console.error("scans tekrar_gelen:", e.message));
+
 // LLM anahtarlarini kalici gizli dosyadan yukle (/secrets/llm.env)
 (function loadLlmSecrets() {
   try {
@@ -160,7 +165,22 @@ app.get("/blog/:slug", (req, res) => {
   const dir = path.join(__dirname, "public", "blog");
   for (const c of [slug + ".html", "blog-" + slug + ".html"]) {
     const f = path.join(dir, c);
-    if (fs.existsSync(f)) return res.sendFile(f);
+    if (fs.existsSync(f)) {
+      // Makale HTML'leri stilsiz (duz beyaz). 19 dosyaya dokunmadan, sunumda
+      // site temasini (koyu/altin) enjekte et: CSS link + ust bar + alt CTA.
+      let html = fs.readFileSync(f, "utf8");
+      const bar = '<div class="rq-blogbar"><a class="rq-logo" href="/">Republique</a>' +
+        '<span class="rq-links"><a href="/blog">Blog</a><a href="/menu">Menü</a></span></div>';
+      const foot = '<div class="rq-blogfoot"><hr>Republique Social House · Tunalı Hilmi, Çankaya · ' +
+        '<a href="/blog">Tüm yazılar</a> · <a href="/menu">Menüyü aç</a></div>';
+      if (html.includes("</head>")) html = html.replace("</head>", '<link rel="stylesheet" href="/blog/blog.css"></head>');
+      if (/<body[^>]*>/.test(html)) html = html.replace(/<body[^>]*>/, (m) => m + bar);
+      else html = bar + html;
+      if (html.includes("</body>")) html = html.replace("</body>", foot + "</body>");
+      else html = html + foot;
+      res.set("Content-Type", "text/html; charset=utf-8");
+      return res.send(html);
+    }
   }
   res.status(404).sendFile(path.join(__dirname, "public", "blog", "index.html"));
 });
@@ -288,15 +308,39 @@ app.get("/api/admin/audit-log", async (req, res) => {
 });
 
 
+// Trafik kaynagini siniflandir: reklam / organik / sosyal / referans / dogrudan.
+// utm_medium/fbclid oncelikli; yoksa referrer alan adina bakar. Meta reklam = "reklam".
+function kaynakSiniflandir({ utm_source, utm_medium, fbclid, referrer }) {
+  const med = String(utm_medium || "").toLowerCase();
+  const src = String(utm_source || "").toLowerCase();
+  const ref = String(referrer || "").toLowerCase();
+  if (fbclid || med.includes("cpc") || med.includes("paid") || med.includes("ppc") || med === "ad" || med === "ads") return "reklam";
+  if (["facebook", "instagram", "fb", "ig", "meta"].includes(src) && !fbclid && !med) return "sosyal";
+  const social = ["facebook.", "instagram.", "l.facebook", "l.instagram", "fb.", "t.co", "twitter.", "x.com", "tiktok.", "youtube.", "youtu.be", "linkedin."];
+  if (social.some(s => ref.includes(s))) return "sosyal";
+  if (med === "social") return "sosyal";
+  if (ref.includes("google.") || ref.includes("bing.") || ref.includes("yandex.") || ref.includes("duckduckgo.") || med === "organic") return "organik";
+  if (ref && !ref.includes("republique.tr")) return "referans";
+  return "dogrudan"; // referrer yok, utm yok -> QR/dogrudan giris
+}
+
 app.post("/api/track", async (req, res) => {
   try {
-    const { rep_id, fbp, fbc, masa, utm_source, utm_medium, utm_campaign, utm_content, utm_term, fbclid } = req.body;
+    const { rep_id, fbp, fbc, masa, utm_source, utm_medium, utm_campaign, utm_content, utm_term, fbclid, referrer } = req.body;
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
     const userAgent = req.headers['user-agent'];
+    const kaynak_tur = kaynakSiniflandir({ utm_source, utm_medium, fbclid, referrer });
+    // Tekrar gelen mi? Bu rep_id daha once (6+ saat once) taranmis mi?
+    let tekrar_gelen = false;
+    try {
+      const r = await db.query(
+        "SELECT 1 FROM scans WHERE rep_id = $1 AND created_at < now() - interval '6 hours' LIMIT 1", [rep_id]);
+      tekrar_gelen = r.rowCount > 0;
+    } catch (e) { /* kolon/tablo yoksa sessizce gec */ }
     await db.query(
-      `INSERT INTO scans (rep_id, fbp, fbc, masa, utm_source, utm_medium, utm_campaign, utm_content, utm_term, fbclid, user_agent, ip)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-      [rep_id, fbp, fbc, masa, utm_source, utm_medium, utm_campaign, utm_content, utm_term, fbclid, userAgent, ip]
+      `INSERT INTO scans (rep_id, fbp, fbc, masa, utm_source, utm_medium, utm_campaign, utm_content, utm_term, fbclid, user_agent, ip, kaynak_tur, referrer, tekrar_gelen)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+      [rep_id, fbp, fbc, masa, utm_source, utm_medium, utm_campaign, utm_content, utm_term, fbclid, userAgent, ip, kaynak_tur, String(referrer || "").slice(0, 300), tekrar_gelen]
     );
     res.json({ success: true });
   } catch (err) {
@@ -321,6 +365,26 @@ app.get("/api/admin/reports", async (req, res) => {
     res.json(rows);
   } catch (err) {
     console.error('Reports error:', err);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// Trafik atif ozeti: kaynak turu bazinda + tekrar-gelen sayilari (son N gun).
+app.get("/api/admin/attribution", async (req, res) => {
+  try {
+    const days = Math.min(parseInt(req.query.days) || 7, 90);
+    const { rows } = await db.query(
+      `SELECT COALESCE(kaynak_tur,'dogrudan') AS kaynak_tur,
+              COUNT(*)::int AS toplam,
+              COUNT(*) FILTER (WHERE tekrar_gelen)::int AS tekrar
+       FROM scans
+       WHERE created_at >= now() - ($1||' days')::interval
+       GROUP BY 1 ORDER BY 2 DESC`, [String(days)]);
+    const toplam = rows.reduce((a, r) => a + r.toplam, 0);
+    const tekrarToplam = rows.reduce((a, r) => a + r.tekrar, 0);
+    res.json({ days, toplam, tekrarToplam, kaynaklar: rows });
+  } catch (err) {
+    console.error('Attribution error:', err.message);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
