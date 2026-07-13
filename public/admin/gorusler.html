@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Geri Bildirim</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#05100c;--panel:#0a1f16;--line:rgba(212,175,55,0.18);--ink:#f5f5f5;--muted:#a0aab2;--gold:#d4af37}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:'Outfit',system-ui,sans-serif;padding:20px}
+  h1{font-size:22px;color:var(--gold);margin-bottom:4px}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:16px}
+  .bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center}
+  select,button{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:9px;padding:8px 11px;font-family:inherit;font-size:13px;cursor:pointer}
+  .stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:11px 15px;min-width:110px}
+  .stat b{display:block;font-size:22px;color:var(--gold)}
+  .stat span{font-size:12px;color:var(--muted)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:14px;margin-bottom:11px}
+  .card.olumsuz{border-left:4px solid #e06666}
+  .card.olumlu{border-left:4px solid #57bb8a}
+  .card.notr{border-left:4px solid #7a8}
+  .meta{display:flex;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-bottom:7px;align-items:center}
+  .tag{padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600}
+  .tag.olumsuz{background:rgba(224,102,102,.18);color:#f0a}
+  .tag.olumlu{background:rgba(87,187,138,.18);color:#7d9}
+  .tag.notr{background:rgba(160,170,178,.15);color:#bcc}
+  .tag.d-yeni{background:rgba(212,175,55,.2);color:var(--gold)}
+  .tag.d-ilgilenildi{background:rgba(90,140,220,.2);color:#9bf}
+  .tag.d-cozuldu{background:rgba(87,187,138,.15);color:#7d9}
+  .txt{font-size:15px;line-height:1.5;margin-bottom:10px}
+  .act{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+  .act input{background:var(--bg);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:7px 9px;font-family:inherit;font-size:12px}
+  .act button{padding:7px 11px;font-size:12px}
+  .act button.p{background:linear-gradient(180deg,var(--gold),#b8912f);color:#05100c;border:0;font-weight:600}
+  .empty{color:var(--muted);text-align:center;padding:40px}
+  .tabs{display:flex;gap:6px;margin-bottom:14px}
+  .tabs button.on{background:rgba(212,175,55,.2);color:#fff}
+</style>
+</head>
+<body>
+  <h1>Geri Bildirim & Üyeler</h1>
+  <div class="sub">Olumsuz deneyimi Google'a gitmeden içeride yakala ve çöz.</div>
+
+  <div class="tabs">
+    <button id="tabFb" class="on" onclick="showTab('fb')">Geri Bildirimler</button>
+    <button id="tabMem" onclick="showTab('mem')">Üyeler</button>
+  </div>
+
+  <div id="fbView">
+    <div class="stats" id="stats"></div>
+    <div class="bar">
+      <select id="fTip"><option value="">Tüm tipler</option><option value="olumsuz">Olumsuz</option><option value="olumlu">Olumlu</option><option value="notr">Nötr</option></select>
+      <select id="fDurum"><option value="">Tüm durumlar</option><option value="yeni">Yeni</option><option value="ilgilenildi">İlgilenildi</option><option value="cozuldu">Çözüldü</option></select>
+      <select id="fDays"><option value="7">Son 7 gün</option><option value="30" selected>Son 30 gün</option><option value="90">Son 90 gün</option><option value="365">Son 1 yıl</option></select>
+      <button onclick="loadFb()">Yenile</button>
+    </div>
+    <div id="list"></div>
+  </div>
+
+  <div id="memView" style="display:none">
+    <div class="stats"><div class="stat"><b id="memCount">0</b><span>toplam üye</span></div></div>
+    <div id="memList"></div>
+  </div>
+
+<script>
+function esc(s){return String(s==null?'':s).replace(/[<>&]/g,function(c){return({'<':'&lt;','>':'&gt;','&':'&amp;'})[c];});}
+function dt(s){try{return new Date(s).toLocaleString('tr-TR');}catch(e){return s;}}
+function showTab(t){
+  document.getElementById('fbView').style.display=t==='fb'?'block':'none';
+  document.getElementById('memView').style.display=t==='mem'?'block':'none';
+  document.getElementById('tabFb').className=t==='fb'?'on':'';
+  document.getElementById('tabMem').className=t==='mem'?'on':'';
+  if(t==='mem')loadMem();
+}
+async function loadFb(){
+  var tip=document.getElementById('fTip').value, durum=document.getElementById('fDurum').value, days=document.getElementById('fDays').value;
+  var q='/api/admin/feedback?days='+days+(tip?'&tip='+tip:'')+(durum?'&durum='+durum:'');
+  var r=await fetch(q); var d=await r.json();
+  var el=document.getElementById('list');
+  // ozet
+  var sum={olumsuz:0,olumlu:0,notr:0,yeni:0};
+  (d.ozet||[]).forEach(function(x){sum[x.tip]=(sum[x.tip]||0)+x.c; if(x.durum==='yeni')sum.yeni+=x.c;});
+  document.getElementById('stats').innerHTML=
+    '<div class="stat"><b>'+(sum.yeni||0)+'</b><span>yeni (ilgilenilmedi)</span></div>'
+    +'<div class="stat"><b style="color:#f0a">'+(sum.olumsuz||0)+'</b><span>olumsuz</span></div>'
+    +'<div class="stat"><b style="color:#7d9">'+(sum.olumlu||0)+'</b><span>olumlu</span></div>'
+    +'<div class="stat"><b>'+(sum.notr||0)+'</b><span>nötr</span></div>';
+  if(!d.kayitlar||!d.kayitlar.length){el.innerHTML='<div class="empty">Kayıt yok.</div>';return;}
+  el.innerHTML=d.kayitlar.map(function(k){
+    return '<div class="card '+k.tip+'">'
+      +'<div class="meta"><span class="tag '+k.tip+'">'+k.tip+'</span>'
+      +'<span class="tag d-'+k.durum+'">'+k.durum+'</span>'
+      +(k.masa?'<span>Masa: '+esc(k.masa)+'</span>':'')
+      +'<span>'+dt(k.created_at)+'</span>'
+      +(k.ilgilenen?'<span>· ilgilenen: '+esc(k.ilgilenen)+'</span>':'')+'</div>'
+      +'<div class="txt">'+esc(k.metin)+'</div>'
+      +'<div class="act">'
+      +'<input id="ilg'+k.id+'" placeholder="ilgilenen kişi" value="'+esc(k.ilgilenen||'')+'">'
+      +'<button onclick="upd('+k.id+',\'ilgilenildi\')">İlgilenildi</button>'
+      +'<button class="p" onclick="upd('+k.id+',\'cozuldu\')">Çözüldü</button>'
+      +'</div></div>';
+  }).join('');
+}
+async function upd(id,durum){
+  var ilg=(document.getElementById('ilg'+id)||{}).value||'';
+  await fetch('/api/admin/feedback/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({durum:durum,ilgilenen:ilg})});
+  loadFb();
+}
+async function loadMem(){
+  var r=await fetch('/api/admin/members'); var d=await r.json();
+  document.getElementById('memCount').textContent=d.sayi||0;
+  var el=document.getElementById('memList');
+  if(!d.kayitlar||!d.kayitlar.length){el.innerHTML='<div class="empty">Üye yok.</div>';return;}
+  el.innerHTML=d.kayitlar.map(function(m){
+    return '<div class="card"><div class="meta"><span>'+dt(m.created_at)+'</span>'+(m.masa?'<span>Masa: '+esc(m.masa)+'</span>':'')+'</div>'
+      +'<div class="txt">'+esc(m.isim||'(isimsiz)')+' — <b style="color:var(--gold)">'+esc(m.telefon)+'</b></div></div>';
+  }).join('');
+}
+loadFb();
+</script>
+</body>
+</html>

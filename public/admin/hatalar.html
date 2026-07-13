@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>İstemci Hataları</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#05100c;--panel:#0a1f16;--line:rgba(212,175,55,.18);--ink:#f5f5f5;--muted:#a0aab2;--gold:#d4af37}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:'Outfit',system-ui,sans-serif;padding:18px}
+  h1{font-size:21px;color:var(--gold);margin-bottom:4px}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:14px}
+  .bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
+  select,button{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:9px;padding:8px 11px;font-family:inherit;font-size:13px;cursor:pointer}
+  .stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:11px 15px;min-width:100px}
+  .stat b{display:block;font-size:22px;color:var(--gold)}
+  .stat span{font-size:12px;color:var(--muted)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:9px}
+  .card.donma,.card.js,.card.promise{border-left:4px solid #e06666}
+  .card.kaynak{border-left:4px solid #d4af37}
+  .meta{display:flex;gap:9px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-bottom:6px;align-items:center}
+  .tag{padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;background:rgba(224,102,102,.18);color:#f0a}
+  .tag.kaynak{background:rgba(212,175,55,.18);color:var(--gold)}
+  .msg{font-size:14px;line-height:1.45;word-break:break-word}
+  .src{font-family:monospace;font-size:11px;color:#9bf;margin-top:4px;word-break:break-all}
+  .stack{font-family:monospace;font-size:11px;color:var(--muted);white-space:pre-wrap;margin-top:6px;max-height:120px;overflow:auto;background:var(--bg);border-radius:8px;padding:8px}
+  .empty{color:var(--muted);text-align:center;padding:40px}
+</style>
+</head>
+<body>
+  <h1>İstemci (Telefon/Tarayıcı) Hataları</h1>
+  <div class="sub">Misafirlerin cihazında oluşan, sunucu logunda GÖRÜNMEYEN hatalar/çökmeler burada. "donma" = sayfa kilitlenmesi (Safari çökmesi riski).</div>
+  <div class="stats" id="stats"></div>
+  <div class="bar">
+    <select id="fTip"><option value="">Tüm tipler</option><option value="donma">Donma/kilitlenme</option><option value="js">JS hatası</option><option value="promise">Promise</option><option value="kaynak">Kaynak (görsel/script)</option></select>
+    <select id="fDays"><option value="1">Son 1 gün</option><option value="7" selected>Son 7 gün</option><option value="30">Son 30 gün</option></select>
+    <button onclick="load()">Yenile</button>
+  </div>
+  <div id="list"></div>
+<script>
+function esc(s){return String(s==null?'':s).replace(/[<>&]/g,function(c){return({'<':'&lt;','>':'&gt;','&':'&amp;'})[c];});}
+function dt(s){try{return new Date(s).toLocaleString('tr-TR');}catch(e){return s||'';}}
+function dev(ua){ua=ua||'';if(/iphone/i.test(ua))return'iPhone';if(/ipad/i.test(ua))return'iPad';if(/android/i.test(ua))return'Android';if(/mac/i.test(ua))return'Mac';if(/windows/i.test(ua))return'Windows';return'Diğer';}
+async function load(){
+  var tip=document.getElementById('fTip').value,days=document.getElementById('fDays').value;
+  var r=await fetch('/api/admin/client-logs?days='+days); var d=await r.json();
+  var sum={donma:0,js:0,promise:0,kaynak:0};(d.ozet||[]).forEach(function(x){sum[x.tip]=x.c;});
+  document.getElementById('stats').innerHTML=
+    '<div class="stat"><b style="color:#f0a">'+(sum.donma||0)+'</b><span>donma/kilitlenme</span></div>'
+    +'<div class="stat"><b>'+(sum.js||0)+'</b><span>JS hatası</span></div>'
+    +'<div class="stat"><b>'+(sum.promise||0)+'</b><span>promise</span></div>'
+    +'<div class="stat"><b>'+(sum.kaynak||0)+'</b><span>kaynak</span></div>';
+  var rows=(d.kayitlar||[]);if(tip)rows=rows.filter(function(x){return x.tip===tip;});
+  var el=document.getElementById('list');
+  if(!rows.length){el.innerHTML='<div class="empty">Kayıt yok 👍 (istemci tarafında hata görünmüyor)</div>';return;}
+  el.innerHTML=rows.map(function(k){
+    return '<div class="card '+k.tip+'"><div class="meta"><span class="tag '+k.tip+'">'+k.tip+'</span>'
+      +'<span>'+dev(k.ua)+'</span>'+(k.masa?'<span>Masa: '+esc(k.masa)+'</span>':'')+'<span>'+dt(k.created_at)+'</span></div>'
+      +'<div class="msg">'+esc(k.mesaj)+'</div>'
+      +(k.kaynak?'<div class="src">'+esc(k.kaynak)+'</div>':'')
+      +(k.url?'<div class="src">'+esc(k.url)+'</div>':'')
+      +(k.stack?'<div class="stack">'+esc(k.stack)+'</div>':'')+'</div>';
+  }).join('');
+}
+load();
+</script>
+</body>
+</html>

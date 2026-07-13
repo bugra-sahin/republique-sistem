@@ -160,6 +160,14 @@
       }
       const reply = (data && data.reply) || 'Şu an yanıt veremiyorum.';
       addMsg('assistant', reply); history.push({ role: 'assistant', content: reply, _sent: true });
+      // Gorus alindi + tekrar gelen misafir + olumsuz degil -> Google degerlendirme linkini nazikce goster
+      if (data && data.googleDavet && data.googleUrl) {
+        const g = document.createElement('a');
+        g.href = data.googleUrl; g.target = '_blank'; g.rel = 'noopener';
+        g.textContent = "Google'da değerlendir";
+        g.style.cssText = "align-self:flex-start;display:inline-block;background:#1a73e8;color:#fff;text-decoration:none;border-radius:12px;padding:9px 14px;font-size:13px;font-weight:600;margin-top:-2px";
+        body.appendChild(g); body.scrollTop = body.scrollHeight;
+      }
       if (data && data.goto) {
         const norm = x => String(x).toLowerCase().replace(/ı/g,'i').replace(/ü/g,'u').replace(/ö/g,'o').replace(/ç/g,'c').replace(/ş/g,'s').replace(/ğ/g,'g').replace(/[^a-z0-9]/g,'');
         const g = norm(data.goto); const btns = [...document.querySelectorAll('.cat-btn')];

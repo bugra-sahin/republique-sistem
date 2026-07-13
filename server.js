@@ -25,6 +25,16 @@ db.query(`CREATE TABLE IF NOT EXISTS section_views (
 )`).catch(e => console.error("section_views tablo:", e.message));
 db.query(`ALTER TABLE section_views ADD COLUMN IF NOT EXISTS kind TEXT DEFAULT 'section'`).catch(() => {});
 
+// Istemci-tarafi hata/cokme kayitlari (telefonda olusan, sunucu logunda gorunmeyen sorunlar)
+db.query(`CREATE TABLE IF NOT EXISTS client_logs (
+  id SERIAL PRIMARY KEY, tip TEXT, mesaj TEXT, kaynak TEXT, stack TEXT, url TEXT, masa TEXT, ua TEXT, ip TEXT, created_at TIMESTAMPTZ DEFAULT now()
+)`).catch(e => console.error("client_logs tablo:", e.message));
+
+// Trafik atifi: scans tablosuna kaynak turu + referrer + tekrar-gelen bayragi ekle (varsa atla).
+db.query("ALTER TABLE scans ADD COLUMN IF NOT EXISTS kaynak_tur TEXT").catch(e => console.error("scans kaynak_tur:", e.message));
+db.query("ALTER TABLE scans ADD COLUMN IF NOT EXISTS referrer TEXT").catch(e => console.error("scans referrer:", e.message));
+db.query("ALTER TABLE scans ADD COLUMN IF NOT EXISTS tekrar_gelen BOOLEAN").catch(e => console.error("scans tekrar_gelen:", e.message));
+
 // LLM anahtarlarini kalici gizli dosyadan yukle (/secrets/llm.env)
 (function loadLlmSecrets() {
   try {
@@ -42,8 +52,17 @@ db.query(`ALTER TABLE section_views ADD COLUMN IF NOT EXISTS kind TEXT DEFAULT '
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
+
+// Guvenlik basliklari (tum yanitlara) — clickjacking/mime-sniffing/referrer sertlestirme
+app.use((req, res, next) => {
+  res.set("X-Content-Type-Options", "nosniff");
+  res.set("X-Frame-Options", "SAMEORIGIN");
+  res.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.set("Permissions-Policy", "geolocation=(), microphone=(), camera=(self)");
+  next();
+});
 
 // === ADMIN GUVENLIK + AUDIT LOG ===
 // Audit log tablosu: admin panelinde yapilan her ISLEM (degisiklik) kaydedilir
@@ -82,7 +101,8 @@ function adminAuth(req, res, next) {
       const dec = Buffer.from(m[1], "base64").toString("utf8");
       const idx = dec.indexOf(":");
       const pass = idx >= 0 ? dec.slice(idx + 1) : "";
-      if (pass === pw) return next();
+      const a = Buffer.from(String(pass)), b = Buffer.from(String(pw));
+      if (a.length === b.length && require("crypto").timingSafeEqual(a, b)) return next();
     } catch (e) {}
   }
   res.set("WWW-Authenticate", 'Basic realm="Republique Yonetim"');
@@ -115,7 +135,7 @@ app.get("/health", (req, res) => {
 });
 
 // Admin alt-URL'ler: her bolum kendi adresinde (deep-link/refresh calisir). Shell (index.html) sunulur.
-app.get(["/admin", "/admin/canli", "/admin/rapor", "/admin/sohbetler", "/admin/audit", "/admin/reklam", "/admin/cari"], (req, res) => {
+app.get(["/admin", "/admin/canli", "/admin/rapor", "/admin/sohbetler", "/admin/gorusler", "/admin/personel", "/admin/hatalar", "/admin/audit", "/admin/reklam", "/admin/cari"], (req, res) => {
   res.sendFile(path.join(__dirname, "public", "admin", "index.html"));
 });
 
@@ -136,6 +156,63 @@ app.get("/menu/:table", (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// Blog (SEO/GEO icerik) — temiz URL'ler. Dosyalar public/blog/ altinda.
+app.get("/blog", (req, res) => res.sendFile(path.join(__dirname, "public", "blog", "index.html")));
+// Blog stil dosyasi — :slug route'undan ONCE tanimla ki onu yutmasin.
+app.get("/blog/blog.css", (req, res) => {
+  res.set("Content-Type", "text/css; charset=utf-8");
+  res.sendFile(path.join(__dirname, "public", "blog", "blog.css"));
+});
+app.get("/blog/:slug", (req, res) => {
+  const slug = String(req.params.slug || "").toLowerCase().replace(/[^a-z0-9-]/g, "");
+  if (!slug) return res.redirect("/blog");
+  const fs = require("fs");
+  const dir = path.join(__dirname, "public", "blog");
+  for (const c of [slug + ".html", "blog-" + slug + ".html"]) {
+    const f = path.join(dir, c);
+    if (fs.existsSync(f)) {
+      // 19 makaleye tek tek dokunmadan sunumda: isim duzeltme + tema + iç link + Maps + schema enjekte et.
+      let html = fs.readFileSync(f, "utf8");
+      const curSlug = c.replace(/^blog-/, "").replace(/\.html$/, "");
+      // 1) Isim: her yerde "Republique Tunalı"
+      html = html.replace(/Republique Social House/g, "Republique Tunalı");
+      // 2) Restaurant/LocalBusiness JSON-LD (yerel SEO) — NAP + menu + Maps
+      const rest = '<script type="application/ld+json">' + JSON.stringify({
+        "@context": "https://schema.org", "@type": "Restaurant", "name": "Republique Tunalı",
+        "servesCuisine": ["Cocktail bar", "Pub", "Restaurant"], "priceRange": "₺₺",
+        "telephone": "+905526565159", "url": "https://republique.tr", "hasMenu": "https://menu.republique.tr",
+        "image": "https://republique.tr/logo.png",
+        "address": { "@type": "PostalAddress", "streetAddress": "Bestekar Cd 65/B, Remzi Oğuz Arık Mah.", "addressLocality": "Çankaya", "addressRegion": "Ankara", "postalCode": "06060", "addressCountry": "TR" },
+        "hasMap": "https://share.google/rJCHpjDGK456xl63a",
+        "openingHoursSpecification": [{ "@type": "OpeningHoursSpecification", "dayOfWeek": ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"], "opens": "12:00", "closes": "01:00" }]
+      }) + '</script>';
+      // 3) Ic link (ilgili yazilar) + Maps + menu CTA — footer'da
+      const ilgili = [
+        ["kokteyl-cesitleri", "Kokteyl çeşitleri"], ["klasik-kokteyller", "Klasik kokteyller"],
+        ["alkolsuz-kokteyller", "Alkolsüz kokteyller"], ["viski-nasil-icilir", "Viski nasıl içilir"],
+        ["sarap-yemek-uyumu", "Şarap & yemek uyumu"], ["tunali-nerede-yenir", "Tunalı'da nerede yenir"],
+        ["cankaya-restoran-rehberi", "Çankaya restoran rehberi"], ["ankara-ozel-gun-mekani", "Ankara özel gün mekânı"]
+      ].filter(x => x[0] !== curSlug).slice(0, 5)
+        .map(x => '<a href="/blog/' + x[0] + '">' + x[1] + '</a>').join(" · ");
+      const bar = '<div class="rq-blogbar"><a class="rq-logo" href="/">Republique Tunalı</a>' +
+        '<span class="rq-links"><a href="/blog">Blog</a><a href="/menu">Menü</a></span></div>';
+      const foot = '<div class="rq-blogfoot"><hr>'
+        + '<div style="margin-bottom:10px">İlgili yazılar: ' + ilgili + '</div>'
+        + 'Republique Tunalı · Bestekar Cd 65/B, Çankaya/Ankara · '
+        + '<a href="https://share.google/rJCHpjDGK456xl63a" target="_blank" rel="noopener">Google Maps\'te yol tarifi</a> · '
+        + '<a href="/menu">Menüyü aç</a> · <a href="/blog">Tüm yazılar</a></div>';
+      if (html.includes("</head>")) html = html.replace("</head>", '<link rel="stylesheet" href="/blog/blog.css">' + rest + '</head>');
+      if (/<body[^>]*>/.test(html)) html = html.replace(/<body[^>]*>/, (m) => m + bar);
+      else html = bar + html;
+      if (html.includes("</body>")) html = html.replace("</body>", foot + "</body>");
+      else html = html + foot;
+      res.set("Content-Type", "text/html; charset=utf-8");
+      return res.send(html);
+    }
+  }
+  res.status(404).sendFile(path.join(__dirname, "public", "blog", "index.html"));
+});
+
 app.get("/api/menu", (req, res) => {
   const menu = getCachedMenu();
   if (menu) {
@@ -152,6 +229,15 @@ app.post("/api/chat", async (req, res) => {
     const repId = (req.cookies && req.cookies.rep_id) || null;
     const ip = (req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0].trim();
     const result = await chatWithWaiter({ message, repId, ip, history, table });
+    // AI garson bir GORUS topladiysa ([[GORUS:]]) kaydet + tekrar gelene Google daveti ekle.
+    if (result && result.gorus) {
+      try {
+        const fb = await require("./src/feedback").kaydetGorus(db, { metin: result.gorus, repId, masa: table, kaynak: "ai-garson" });
+        if (fb && fb.ok) { result.gorusKaydedildi = true; result.gorusTip = fb.tip; result.googleDavet = fb.googleDavet;
+          if (fb.googleDavet) result.googleUrl = "https://g.page/r/CXmH-0MBy7JKEBM/review"; }
+      } catch (e) { console.error("gorus kaydet:", e.message); }
+      delete result.gorus;
+    }
     res.json(result);
     // Sohbeti kaydet (yalnizca gercek yanitlari)
     if (result && result.ok && !result.queued && !result.notable && result.reply && message) {
@@ -197,6 +283,30 @@ app.post("/api/track-dwell", async (req, res) => {
   } catch (e) { res.status(200).json({ ok: false }); }
 });
 
+// Istemci-tarafi hata loglama (telefondan gelen JS hatasi/cokme/donma)
+app.post("/api/client-log", async (req, res) => {
+  try {
+    const b = req.body || {};
+    const ip = (req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0].trim();
+    db.query("INSERT INTO client_logs (tip, mesaj, kaynak, stack, url, masa, ua, ip) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+      [String(b.tip || 'js').slice(0, 20), String(b.mesaj || '').slice(0, 500), String(b.kaynak || '').slice(0, 300),
+       String(b.stack || '').slice(0, 1200), String(b.url || '').slice(0, 300), String(b.masa || '').slice(0, 50),
+       String(b.ua || '').slice(0, 300), ip]).catch(() => {});
+    res.json({ ok: true });
+  } catch (e) { res.status(200).json({ ok: false }); }
+});
+
+// Admin: istemci hata kayitlari
+app.get("/api/admin/client-logs", async (req, res) => {
+  try {
+    const days = Math.min(90, parseInt(req.query.days) || 7);
+    const { rows } = await db.query(
+      "SELECT id, tip, mesaj, kaynak, stack, url, masa, ua, ip, created_at FROM client_logs WHERE created_at >= now() - ($1||' days')::interval ORDER BY created_at DESC LIMIT 500", [String(days)]);
+    const ozet = await db.query("SELECT tip, COUNT(*)::int c FROM client_logs WHERE created_at >= now() - interval '7 days' GROUP BY tip");
+    res.json({ ok: true, kayitlar: rows, ozet: ozet.rows });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 // En cok bakilan urunler (admin)
 app.get("/api/admin/top-products", async (req, res) => {
   try {
@@ -235,15 +345,39 @@ app.get("/api/admin/audit-log", async (req, res) => {
 });
 
 
+// Trafik kaynagini siniflandir: reklam / organik / sosyal / referans / dogrudan.
+// utm_medium/fbclid oncelikli; yoksa referrer alan adina bakar. Meta reklam = "reklam".
+function kaynakSiniflandir({ utm_source, utm_medium, fbclid, referrer }) {
+  const med = String(utm_medium || "").toLowerCase();
+  const src = String(utm_source || "").toLowerCase();
+  const ref = String(referrer || "").toLowerCase();
+  if (fbclid || med.includes("cpc") || med.includes("paid") || med.includes("ppc") || med === "ad" || med === "ads") return "reklam";
+  if (["facebook", "instagram", "fb", "ig", "meta"].includes(src) && !fbclid && !med) return "sosyal";
+  const social = ["facebook.", "instagram.", "l.facebook", "l.instagram", "fb.", "t.co", "twitter.", "x.com", "tiktok.", "youtube.", "youtu.be", "linkedin."];
+  if (social.some(s => ref.includes(s))) return "sosyal";
+  if (med === "social") return "sosyal";
+  if (ref.includes("google.") || ref.includes("bing.") || ref.includes("yandex.") || ref.includes("duckduckgo.") || med === "organic") return "organik";
+  if (ref && !ref.includes("republique.tr")) return "referans";
+  return "dogrudan"; // referrer yok, utm yok -> QR/dogrudan giris
+}
+
 app.post("/api/track", async (req, res) => {
   try {
-    const { rep_id, fbp, fbc, masa, utm_source, utm_medium, utm_campaign, utm_content, utm_term, fbclid } = req.body;
+    const { rep_id, fbp, fbc, masa, utm_source, utm_medium, utm_campaign, utm_content, utm_term, fbclid, referrer } = req.body;
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
     const userAgent = req.headers['user-agent'];
+    const kaynak_tur = kaynakSiniflandir({ utm_source, utm_medium, fbclid, referrer });
+    // Tekrar gelen mi? Bu rep_id daha once (6+ saat once) taranmis mi?
+    let tekrar_gelen = false;
+    try {
+      const r = await db.query(
+        "SELECT 1 FROM scans WHERE rep_id = $1 AND timestamp < now() - interval '6 hours' LIMIT 1", [rep_id]);
+      tekrar_gelen = r.rowCount > 0;
+    } catch (e) { /* kolon/tablo yoksa sessizce gec */ }
     await db.query(
-      `INSERT INTO scans (rep_id, fbp, fbc, masa, utm_source, utm_medium, utm_campaign, utm_content, utm_term, fbclid, user_agent, ip)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-      [rep_id, fbp, fbc, masa, utm_source, utm_medium, utm_campaign, utm_content, utm_term, fbclid, userAgent, ip]
+      `INSERT INTO scans (rep_id, fbp, fbc, masa, utm_source, utm_medium, utm_campaign, utm_content, utm_term, fbclid, user_agent, ip, kaynak_tur, referrer, tekrar_gelen)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+      [rep_id, fbp, fbc, masa, utm_source, utm_medium, utm_campaign, utm_content, utm_term, fbclid, userAgent, ip, kaynak_tur, String(referrer || "").slice(0, 300), tekrar_gelen]
     );
     res.json({ success: true });
   } catch (err) {
@@ -268,6 +402,26 @@ app.get("/api/admin/reports", async (req, res) => {
     res.json(rows);
   } catch (err) {
     console.error('Reports error:', err);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// Trafik atif ozeti: kaynak turu bazinda + tekrar-gelen sayilari (son N gun).
+app.get("/api/admin/attribution", async (req, res) => {
+  try {
+    const days = Math.min(parseInt(req.query.days) || 7, 90);
+    const { rows } = await db.query(
+      `SELECT COALESCE(kaynak_tur,'dogrudan') AS kaynak_tur,
+              COUNT(*)::int AS toplam,
+              COUNT(*) FILTER (WHERE tekrar_gelen)::int AS tekrar
+       FROM scans
+       WHERE timestamp >= now() - ($1||' days')::interval
+       GROUP BY 1 ORDER BY 2 DESC`, [String(days)]);
+    const toplam = rows.reduce((a, r) => a + r.toplam, 0);
+    const tekrarToplam = rows.reduce((a, r) => a + r.tekrar, 0);
+    res.json({ days, toplam, tekrarToplam, kaynaklar: rows });
+  } catch (err) {
+    console.error('Attribution error:', err.message);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
@@ -463,6 +617,12 @@ app.post("/api/admin/ads/approve-suggestion", async (req, res) => {
   }
 });
 
+// === EK MODULLER ===
+// Modul 1: musteri uyelik + geri bildirim  |  Modul 5: personel mesai (kiosk QR)
+require("./src/feedback").register(app, db);
+require("./src/personel").register(app, db);
+require("./src/uyelik").register(app, db);
+
 app.listen(PORT, "0.0.0.0", async () => {
   console.log("Republique app listening on " + PORT);
   await db.initDb();
@@ -472,14 +632,16 @@ app.listen(PORT, "0.0.0.0", async () => {
   });
   // Menu bos ise otomatik tekrar cek (puppeteer ara sira basarisiz oluyor). Kalici volume (menudata)
   // sayesinde bir kez yuklenince restart'ta hemen hazir olur.
+  // Menu bossa tekrar cek — 5 dakikada bir (agir Puppeteer'i sik cagirmamak icin; onceden 60sn idi -> OOM/AI-restart riski)
   setInterval(() => {
     if (!getCachedMenu()) {
       console.log("Menu bos, tekrar cekiliyor...");
       updateMenu().catch(err => console.error("Menu retry hatasi:", err.message));
     }
-  }, 60000);
-  // 30 dakikada bir tazele (fiyat/stok degisimi Firestore push disinda da yakalansin)
+  }, 300000);
+  // Periyodik tazeleme — 3 saatte bir (fiyat/stok Firestore push ile zaten aninda gelir; happy-hour fiyati
+  // menu verisinden ISTEMCIDE hesaplaniyor, sik refresh gerekmez). Puppeteer yukunu azaltir.
   setInterval(() => {
     updateMenu().catch(err => console.error("Menu periyodik guncelleme hatasi:", err.message));
-  }, 30 * 60000);
+  }, 3 * 3600000);
 });

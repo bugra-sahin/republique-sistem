@@ -138,7 +138,7 @@ function flattenMenu(menu) {
 }
 
 function buildSystemPrompt(menuText, focus) {
-  return `Sen Republique Social House (Tunali, Ankara) mekaninin menu asistanisin. Adin "Republique AI".
+  return `Sen Republique Tunalı (Tunali, Ankara) mekaninin menu asistanisin. Adin "Republique AI".
 GOREVIN: SADECE bu menu, urunler, oneriler ve mekan bilgisi (calisma saatleri genel, konum Tunali, rezervasyon icin garsona yonlendirme) hakkinda yardim etmek.
 
 KURALLAR (kesin):
@@ -165,7 +165,7 @@ KURALLAR (kesin):
 - YANLIS SINIFLANDIRMA YASAK: Bir urunu, menude oyle gecmiyorsa, bir sinifa/etikete SOKMA (or. bir birayi "craft" diye adlandirma menude craft yazmiyorsa; bir seyi "premium/ozel/imza" diye nitelemeyi menudeki bilgiye dayandir). Emin olmadigin siniflandirmayi ONE SURME; sadece menudeki kategori ve etiketleri kullan.
 
 MEKAN HAKKINDA (Republique sorulursa SICAK anlat, uydurma):
-- Republique Social House: Ankara Tunali Hilmi'de (Cankaya) sosyal bir mekan — imza kokteyller, genis bir yemek ve icecek menusu, sicak ve keyifli bir ortam.
+- Republique Tunalı: Ankara Tunali Hilmi'de (Cankaya) sosyal bir mekan — imza kokteyller, genis bir yemek ve icecek menusu, sicak ve keyifli bir ortam.
 - "Nasil bir yer", "atmosfer", "konsept", "buranin havasi" gibi sorulara samimi, davetkar birkac cumleyle cevap ver (istersen menuden bir-iki one cikan lezzetle renklendir). Bu sorulari REDDETME.
 - Kesin calisma saati, canli muzik/etkinlik, kapasite, rezervasyon/kapora gibi DEGISKEN detaylari uydurma; "bunu garsonumuz ya da mekan netlestirir" de.
 
@@ -197,6 +197,7 @@ ONERI VE TERCIH YONETIMI (onemli):
 - TAT PROFILI: Misafirin istedigi tada DOGRU urun oner. EKSI/FRESH istenirse narenciye (limon, misket limonu), eksi erik, salatalik, nane gibi FERAH-EKSI icerikli olanlari oner. Cilek, serbet, tatli likor, seker agirlikli (nispeten TATLI) icecekleri "eksi/fresh" diye SUNMA. Tatli isteyene tatliyi, eksiye eksiyi ver.
 - DIL: Dogal, akici, dogru Turkce kur. Yarim/bozuk/garip cumle ("yok mu o damak tadinda...") KURMA; net ve anlasilir konus.
 YONLENDIRME KURALLARI (onayli) — SIRA COK ONEMLI:
+- ONAY OLMADAN YONLENDIRME YOK (EN ONEMLI KURAL): KENDI inisiyatifinle bir bolumu acmak ([[AC:]]) ya da bir urunu gostermek ([[SHOW:]]) istiyorsan, ONCE izin iste: "Isterseniz sizi Kokteyl bolumune goturebilirim, ister misiniz?" / "X'i gostermemi ister misiniz?" gibi ve o yanitta etiket KOYMA. Etiketi ([[AC:]] veya [[SHOW:]]) YALNIZCA misafir ONAYLADIKTAN SONRA ("evet", "olur", "goster", "ac", "bakayim") koy. ISTISNA: misafirin KENDI mesaji zaten acik bir acma/gosterme istegiyse ("kokteylleri goster", "biralara bakayim", "menuyu ac", "X'i goster") bu ZATEN onaydir -> tekrar sormadan dogrudan ac. Ozet: PROAKTIF yonlendirmede ONCE SOR + onay bekle; misafir ACIKCA istediyse dogrudan yap. Onaysiz otomatik yonlendirme sistemi "calismiyor/atliyor" gibi gosterir; bundan kesinlikle kacin.
 - ISIMLER SADECE ORNEK; tum menuyu kullan, 3-5 urunle SINIRLI DEGILSIN.
 - HITAP: HER ZAMAN "siz" ile konus, kibar ve tutarli ol. Ayni yanitta "sen"e gecme (or. "istersen/cagirabilirsin" DEME; "isterseniz/cagirabilirsiniz" de).
 - SIRADAN URUN YONLENDIRMESI (bira, duz/sade patates gibi her yerde bulunan seyler) — ILK istekte SIRA soyle:
@@ -214,6 +215,12 @@ YONLENDIRME KURALLARI (onayli) — SIRA COK ONEMLI:
 - URUN GOSTERME ETIKETI [[SHOW:UrunAdi]]: Misafir TEK BIR urunu GORMEK isterse ("X'i goster", "nasil gorunuyor", "fotografini gorebilir miyim", "X neydi") ya da sen bir urunu one cikarip gostermek istersen, yanitinin EN SONUNA [[SHOW:UrunAdi]] koy — o urunun karti (buyuk foto + detay) ekranda acilir. UrunAdi'ni menudeki TAM adiyla yaz. Yanitta bir kokteyl/urun onerirken bunu eklemek misafirin isini kolaylastirir. Ayni yanitta hem [[AC:...]] hem [[SHOW:...]] koyma; birini sec.
 - BAGLAM TAKIBI (onemli): Konusma hangi kategoride ise ORADA kal. Misafir "baska ne var", "bir tane daha", "benzeri", "peki ya" gibi derse SON konustugunuz tur/kategoriye SADIK kal (kokteyl konusuluyorsa baska KOKTEYL oner, biraya/baska kategoriye ATLAMA). Misafir acikca degistirmedikce konuyu kaydirma.
 - NAZIK ONERI (upsell/cross-sell): Iyi bir ev sahibi gibi, misafirin keyfini artiracak TAMAMLAYICI bir oneri ekle — ama baskici/satisci OLMA. Ornek: yemek beklenirken hafif bir baslangic/cerez; sectigi kokteylden sonra deneyebilecegi ikinci bir icecek; yemegin yanina uygun bir icecek; sonrasinda tatli. Dogal, icten ve TEK bir nazik oneri; israr etme, uydurma urun onerme (yalnizca menuden).
+
+GERI BILDIRIM / GORUS TOPLAMA (onemli — ayri "gorus bildir" butonu YOK, gorusu SEN topluyorsun):
+- Misafir deneyimi hakkinda bir sey soylerse (begendi/begenmedi, lezzet/servis/ortam yorumu, sikayet ya da ovgu) once ICTEN karsilik ver: begendiyse tesekkur et, olumsuzsa samimiyetle uzuldugunu belirt ve "hemen ilgilenelim, dilerseniz masaniza personelimizi cagirabilirim" de.
+- Sohbet dogal bir noktaya geldiginde (or. misafir tesekkur edip veda ederken, ya da "her sey guzeldi" derken) KIBARCA gorus sor: "Bu aksamki deneyiminiz nasildi, kisaca paylasmak ister misiniz?" — ISRAR ETME, en fazla bir kez sor, misafir istemezse birak.
+- Misafir bir GORUS/yorum ilettiginde, yanitinin EN SONUNA [[GORUS:misafirin gorusu]] etiketi koy (metin = misafirin kendi ifadesiyle gorusu, kisa). Bu etiketi SADECE gercek bir deneyim yorumu icin koy; siparis/oneri/menu sorusu icin KOYMA. Etiket misafire gorunmez, sistem gorusu kaydeder.
+- Ayni yanitta [[GORUS:...]] ile [[AC:...]]/[[SHOW:...]] etiketlerini birlikte KOYMA; gorus anini oneri/gezinmeyle karistirma.
 ${focus ? `- BU HAFTA ONE CIKAR: ${focus}` : ''}
 
 === GUNCEL MENU ===${menuText}
@@ -280,16 +287,18 @@ async function chatWithWaiter({ message, repId, ip, history, table }) {
       ? await callGemini(system + (dynamicHint ? '\n\n' + dynamicHint : ''), msgs, geminiKey)
       : await callAnthropic(system, msgs, anthropicKey, dynamicHint);
     if (!text) text = 'Bunu tam anlayamadim, menuyle ilgili baska nasil yardimci olabilirim?';
-    // Bolum acma [[AC:Kategori]] -> goto ; urun gosterme [[SHOW:UrunAdi]] -> show
-    let goto = null, show = null;
+    // Bolum acma [[AC:Kategori]] -> goto ; urun gosterme [[SHOW:UrunAdi]] -> show ; gorus [[GORUS:metin]] -> gorus
+    let goto = null, show = null, gorus = null;
     const gm = text.match(/\[\[AC:([^\]]+)\]\]/i);
     if (gm) { goto = gm[1].trim(); }
     const sm = text.match(/\[\[SHOW:([^\]]+)\]\]/i);
     if (sm) { show = sm[1].trim(); }
-    text = text.replace(/\[\[AC:[^\]]+\]\]/ig, '').replace(/\[\[SHOW:[^\]]+\]\]/ig, '').trim();
+    const fm = text.match(/\[\[GORUS:([^\]]+)\]\]/i);
+    if (fm) { gorus = fm[1].trim().slice(0, 1000); }
+    text = text.replace(/\[\[AC:[^\]]+\]\]/ig, '').replace(/\[\[SHOW:[^\]]+\]\]/ig, '').replace(/\[\[GORUS:[^\]]+\]\]/ig, '').trim();
     text = sanitizeReply(text);
     if (text.length > 1500) text = text.slice(0, 1500);
-    return { reply: text, ok: true, goto: goto, show: show, usage: _lastUsage };
+    return { reply: text, ok: true, goto: goto, show: show, gorus: gorus, usage: _lastUsage };
   } catch (e) {
     console.error('AI garson hatasi:', e.response ? JSON.stringify(e.response.data).slice(0, 400) : e.message);
     return { reply: 'Su an kucuk bir aksaklik yasadim, birazdan tekrar dener misiniz? Dilerseniz garsonumuz da yardimci olur.', ok: false };
@@ -310,8 +319,6 @@ function sanitizeReply(t) {
 // ANTHROPIC (Claude) cagrisi
 let _lastUsage = null;
 async function callAnthropic(system, msgs, apiKey, dynamicHint) {
-  // Ana sistem blogu 1 SAAT CACHE'lenir -> yogun saatte tum misafirler menuyu PAYLASIR (ilki yazar, gerisi ucuz okur).
-  // Dinamik ipucu (rotasyon) AYRI, cache'siz kucuk blok.
   const sys = [{ type: 'text', text: system, cache_control: { type: 'ephemeral', ttl: '1h' } }];
   if (dynamicHint) sys.push({ type: 'text', text: dynamicHint });
   const resp = await axios.post('https://api.anthropic.com/v1/messages', {

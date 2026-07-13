@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Republique · Mesai Kiosk</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  :root{--bg:#05100c;--gold:#d4af37;--ink:#f5f5f5;--muted:#9aa}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:radial-gradient(circle at 50% 30%,#0a1f16,#05100c);color:var(--ink);font-family:'Outfit',system-ui,sans-serif;
+    min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px}
+  .brand{font-family:'Playfair Display',serif;font-size:26px;color:var(--gold);letter-spacing:1px;margin-bottom:2px}
+  .brand small{display:block;font-size:12px;letter-spacing:3px;color:var(--muted);text-transform:uppercase}
+  .qrbox{background:#fff;padding:22px;border-radius:22px;margin:26px 0 14px;box-shadow:0 20px 60px rgba(0,0,0,.5);min-width:280px;min-height:280px;display:flex;align-items:center;justify-content:center}
+  h1{font-size:22px;margin-bottom:6px}
+  .hint{color:var(--muted);font-size:15px;max-width:420px;line-height:1.5}
+  .bar{width:260px;height:6px;background:rgba(255,255,255,.12);border-radius:3px;margin:16px auto 0;overflow:hidden}
+  .bar>i{display:block;height:100%;background:var(--gold);width:100%;transition:width .9s linear}
+  .pending{max-width:440px}
+  .code{font-family:monospace;font-size:22px;letter-spacing:3px;color:var(--gold);background:rgba(212,175,55,.1);padding:10px 16px;border-radius:12px;display:inline-block;margin:14px 0}
+  .foot{position:fixed;bottom:14px;color:#5a6;font-size:12px}
+  .spin{width:38px;height:38px;border:4px solid rgba(212,175,55,.25);border-top-color:var(--gold);border-radius:50%;animation:s 1s linear infinite;margin:18px auto}
+  @keyframes s{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+  <div class="brand">REPUBLIQUE<small>Mesai Kiosk</small></div>
+  <div id="app"><div class="spin"></div><p class="hint">Bağlanıyor…</p></div>
+  <div class="foot" id="foot"></div>
+<script>
+(function(){
+  var app=document.getElementById('app'), foot=document.getElementById('foot');
+  var host=location.origin;
+  // Cihaz anahtari (bu tarayiciya sabit)
+  function genKey(){var a='abcdefghijklmnopqrstuvwxyz0123456789',s='';for(var i=0;i<32;i++)s+=a[Math.floor(Math.random()*a.length)];return s;}
+  var key=localStorage.getItem('kiosk_key'); if(!key){key=genKey();localStorage.setItem('kiosk_key',key);}
+  foot.textContent='Cihaz: '+key.slice(0,6);
+
+  var qr=null, refreshTimer=null;
+  function renderQR(text){
+    var box=document.getElementById('qr');
+    if(!box)return;
+    if(!qr){ qr=new QRCode(box,{text:text,width:250,height:250,correctLevel:QRCode.CorrectLevel.M}); }
+    else { qr.clear(); qr.makeCode(text); }
+  }
+  async function tick(){
+    try{
+      var r=await fetch('/api/kiosk/token?key='+encodeURIComponent(key));
+      if(r.status===403){ showPending(); return; }
+      var d=await r.json();
+      if(d.ok&&d.token){
+        renderQR(host+'/personel?punch='+encodeURIComponent(d.token));
+        var b=document.getElementById('bar'); if(b){b.style.width='100%';setTimeout(function(){b.style.width='0%';},50);}
+      }
+    }catch(e){}
+  }
+  function showActive(){
+    app.innerHTML='<h1>Mesai için QR okut</h1>'
+      +'<div class="qrbox"><div id="qr"></div></div>'
+      +'<p class="hint">Telefonunuzun kamerasıyla bu QR\'ı okutun. Giriş / mola / çıkış işleminiz açılır. QR birkaç saniyede bir yenilenir.</p>'
+      +'<div class="bar"><i id="bar"></i></div>';
+    tick(); if(refreshTimer)clearInterval(refreshTimer); refreshTimer=setInterval(tick,8000);
+  }
+  async function poll(){
+    try{
+      var r=await fetch('/api/kiosk/status?key='+encodeURIComponent(key));
+      var d=await r.json();
+      if(d.ok&&d.onayli){ showActive(); return; }
+    }catch(e){}
+    setTimeout(poll,3000);
+  }
+  function showPending(){
+    if(refreshTimer)clearInterval(refreshTimer);
+    app.innerHTML='<div class="pending"><h1>Cihaz onayı bekleniyor</h1>'
+      +'<p class="hint">Bu ekranı yönetici panelinden onaylayın:<br><b>Admin → Personel → Kiosk Onayları</b></p>'
+      +'<div class="code">'+key.slice(0,6).toUpperCase()+'</div>'
+      +'<div class="spin"></div><p class="hint">Onaylandığında otomatik açılır.</p></div>';
+    poll();
+  }
+  async function start(){
+    // once kayit talebi (idempotent), sonra durum
+    try{ await fetch('/api/kiosk/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:key})}); }catch(e){}
+    try{
+      var r=await fetch('/api/kiosk/status?key='+encodeURIComponent(key));
+      var d=await r.json();
+      if(d.ok&&d.onayli) showActive(); else showPending();
+    }catch(e){ setTimeout(start,3000); }
+  }
+  start();
+})();
+</script>
+</body>
+</html>

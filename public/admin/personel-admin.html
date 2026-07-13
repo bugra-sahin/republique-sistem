@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Personel Yönetimi</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#05100c;--panel:#0a1f16;--line:rgba(212,175,55,.18);--ink:#f5f5f5;--muted:#a0aab2;--gold:#d4af37}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:'Outfit',system-ui,sans-serif;padding:18px}
+  h1{font-size:21px;color:var(--gold);margin-bottom:12px}
+  .tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+  .tabs button{background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:9px 13px;font-family:inherit;font-size:13px;cursor:pointer}
+  .tabs button.on{background:rgba(212,175,55,.2);color:#fff}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:14px;margin-bottom:11px}
+  .durum{padding:2px 10px;border-radius:20px;font-size:12px;font-weight:600}
+  .durum.mesai{background:rgba(87,187,138,.18);color:#7d9}
+  .durum.mola{background:rgba(212,175,55,.18);color:var(--gold)}
+  .durum.disarida{background:rgba(160,170,178,.14);color:#bcc}
+  .row{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+  input,select{background:var(--bg);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:9px;font-family:inherit;font-size:13px}
+  button.b{background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:8px 12px;font-family:inherit;font-size:13px;cursor:pointer}
+  button.p{background:linear-gradient(180deg,var(--gold),#b8912f);color:#05100c;border:0;font-weight:600}
+  button.d{border-color:rgba(224,102,102,.5);color:#f0a}
+  .muted{color:var(--muted);font-size:13px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin:8px 0}
+  .tag{padding:2px 8px;border-radius:20px;font-size:11px;background:rgba(212,175,55,.15);color:var(--gold)}
+  h3{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin:14px 0 7px}
+  .empty{color:var(--muted);text-align:center;padding:26px}
+  form.inline{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin:6px 0}
+</style>
+</head>
+<body>
+  <h1>Personel Yönetimi</h1>
+  <div class="tabs">
+    <button class="on" data-t="canli" onclick="tab('canli')">Canlı & Personel</button>
+    <button data-t="onay" onclick="tab('onay')">Onaylar <span id="onayBadge"></span></button>
+    <button data-t="islem" onclick="tab('islem')">İşlemler</button>
+    <button data-t="rapor" onclick="tab('rapor')">Bordro & İhlal</button>
+  </div>
+  <div id="v-canli"></div>
+  <div id="v-onay" style="display:none"></div>
+  <div id="v-islem" style="display:none"></div>
+  <div id="v-rapor" style="display:none"></div>
+<script>
+function esc(s){return String(s==null?'':s).replace(/[<>&]/g,function(c){return({'<':'&lt;','>':'&gt;','&':'&amp;'})[c];});}
+function hrs(dk){dk=dk||0;return Math.floor(dk/60)+'s '+(dk%60)+'dk';}
+function dt(s){try{return new Date(s).toLocaleString('tr-TR');}catch(e){return s||'';}}
+var cur='canli';
+function tab(t){cur=t;['canli','onay','islem','rapor'].forEach(function(x){document.getElementById('v-'+x).style.display=x===t?'block':'none';});
+  document.querySelectorAll('.tabs button').forEach(function(b){b.className=b.dataset.t===t?'on':'';});
+  if(t==='canli')loadCanli();if(t==='onay')loadOnay();if(t==='islem')loadIslem();if(t==='rapor')loadRapor();}
+
+async function loadCanli(){
+  var r=await fetch('/api/admin/personel/list');var d=await r.json();
+  var el=document.getElementById('v-canli');
+  var add='<div class="card"><h3>Yeni Personel</h3><form class="inline" onsubmit="return addP(event)">'
+    +'<input id="nAd" placeholder="Ad Soyad" required><input id="nTel" placeholder="Telefon (ops.)">'
+    +'<button class="b p" type="submit">Ekle</button></form></div>';
+  var list=(d.kayitlar||[]).map(function(p){
+    return '<div class="row"><div><b>'+esc(p.ad)+'</b> '+(p.aktif?'':'<span class="muted">(pasif)</span>')
+      +'<br><span class="muted">'+(p.telefon?esc(p.telefon)+' · ':'')+(p.ilk_giris?'şifre belirlenmedi':'aktif')+'</span></div>'
+      +'<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span class="durum '+p.durum+'">'+p.durum+'</span>'
+      +'<span class="muted">'+hrs(p.bugunDk)+'</span>'
+      +'<button class="b" onclick="resetP('+p.id+')">Şifre sıfırla</button>'
+      +'<button class="b d" onclick="removeP('+p.id+')">Çıkar</button></div></div>';
+  }).join('')||'<div class="empty">Personel yok. Yukarıdan ekleyin.</div>';
+  el.innerHTML=add+'<div class="card"><h3>Personel & Canlı Durum</h3>'+list+'</div>';
+  refreshOnayBadge();
+}
+window.addP=async function(e){e.preventDefault();var ad=document.getElementById('nAd').value.trim();var tel=document.getElementById('nTel').value.trim();
+  if(!ad)return false;await fetch('/api/admin/personel/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ad:ad,telefon:tel})});loadCanli();return false;};
+window.removeP=async function(id){if(!confirm('Personel pasife alınsın mı?'))return;await fetch('/api/admin/personel/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})});loadCanli();};
+window.resetP=async function(id){if(!confirm('Şifre sıfırlansın mı? (personel yeniden belirler)'))return;await fetch('/api/admin/personel/reset-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})});loadCanli();};
+
+async function loadOnay(){
+  var r=await fetch('/api/admin/personel/requests');var d=await r.json();
+  var el=document.getElementById('v-onay');
+  var pdev=(d.personel||[]).map(function(x){return '<div class="row"><div><b>'+esc(x.ad)+'</b><br><span class="muted">'+esc((x.user_agent||'').slice(0,60))+' · '+dt(x.created_at)+'</span></div>'
+    +'<div><button class="b p" onclick="appr(\'personel\','+x.id+')">Onayla</button> <button class="b d" onclick="rev(\'personel\','+x.id+')">Reddet</button></div></div>';}).join('')||'<div class="empty">Bekleyen personel cihazı yok.</div>';
+  var kiosk=(d.kiosk||[]).map(function(x){return '<div class="row"><div><b>Kiosk '+esc((x.cihaz_key||'').slice(0,6).toUpperCase())+'</b><br><span class="muted">'+esc((x.user_agent||'').slice(0,60))+' · '+dt(x.created_at)+'</span></div>'
+    +'<div><button class="b p" onclick="appr(\'kiosk\','+x.id+')">Onayla</button> <button class="b d" onclick="rev(\'kiosk\','+x.id+')">Reddet</button></div></div>';}).join('')||'<div class="empty">Bekleyen kiosk yok.</div>';
+  el.innerHTML='<div class="card"><h3>Personel Cihaz Onayları</h3>'+pdev+'</div><div class="card"><h3>Kiosk Onayları</h3>'+kiosk+'</div>';
+}
+window.appr=async function(tip,id){await fetch('/api/admin/personel/approve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tip:tip,id:id})});loadOnay();refreshOnayBadge();};
+window.rev=async function(tip,id){await fetch('/api/admin/personel/revoke',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tip:tip,id:id})});loadOnay();refreshOnayBadge();};
+async function refreshOnayBadge(){try{var d=await (await fetch('/api/admin/personel/requests')).json();var n=((d.personel||[]).length)+((d.kiosk||[]).length);document.getElementById('onayBadge').textContent=n?('('+n+')'):'';}catch(e){}}
+
+async function loadIslem(){
+  var r=await fetch('/api/admin/personel/list');var d=await r.json();
+  var opts=(d.kayitlar||[]).filter(function(p){return p.aktif;}).map(function(p){return '<option value="'+p.id+'">'+esc(p.ad)+'</option>';}).join('');
+  document.getElementById('v-islem').innerHTML='<div class="card"><h3>Personel Seç</h3>'
+    +'<select id="pSel" onchange="loadDetay()">'+opts+'</select><div id="detay"></div></div>';
+  if(opts)loadDetay();
+}
+window.loadDetay=async function(){
+  var id=document.getElementById('pSel').value;if(!id)return;
+  var d=await (await fetch('/api/admin/personel/detay?id='+id)).json();
+  var forms='<h3>İşlem Gir</h3>'
+    +'<form class="inline" onsubmit="return doAvans(event,'+id+')"><input id="avT" type="number" step="0.01" placeholder="Avans ₺" required><input id="avN" placeholder="not"><button class="b p">Avans Ekle</button></form>'
+    +'<form class="inline" onsubmit="return doIzin(event,'+id+')"><input id="izB" type="date" required><input id="izE" type="date" required><input id="izG" type="number" step="0.5" placeholder="gün" required><button class="b p">İzin Ekle</button></form>'
+    +'<form class="inline" onsubmit="return doMaas(event,'+id+')"><input id="mT" type="number" step="0.01" placeholder="Maaş ₺" required><input id="mD" placeholder="Dönem (2026-07)" required><button class="b p">Maaş Kaydet</button></form>'
+    +'<form class="inline" onsubmit="return doDuz(event,'+id+')"><select id="dTip"><option value="kesinti">Kesinti</option><option value="ekleme">Ekleme</option><option value="ihlal">İhlal</option></select><input id="dDk" type="number" placeholder="dakika" required><input id="dG" placeholder="gerekçe" required><button class="b p">Kaydet</button></form>';
+  var av=(d.avanslar||[]).map(function(a){return '<div class="row"><span>'+esc((a.tarih||'').slice(0,10))+' '+esc(a.not_metni||'')+'</span><b>'+esc(a.tutar)+' ₺</b></div>';}).join('')||'<span class="muted">yok</span>';
+  var iz=(d.izinler||[]).map(function(a){return '<div class="row"><span>'+esc((a.baslangic||'').slice(0,10))+' → '+esc((a.bitis||'').slice(0,10))+' ('+esc(a.tip)+')</span><b>'+esc(a.gun)+' gün</b></div>';}).join('')||'<span class="muted">yok</span>';
+  var ma=(d.maaslar||[]).map(function(a){return '<div class="row"><span>'+esc(a.donem)+'</span><b>'+esc(a.tutar)+' ₺</b></div>';}).join('')||'<span class="muted">yok</span>';
+  var du=(d.duzeltmeler||[]).map(function(a){return '<div class="row"><span>'+dt(a.ts)+' · '+esc(a.tip)+' · '+esc(a.gerekce)+'</span><b>'+esc(a.dakika)+'dk</b></div>';}).join('')||'<span class="muted">yok</span>';
+  document.getElementById('detay').innerHTML=forms+'<h3>Avanslar</h3>'+av+'<h3>İzinler</h3>'+iz+'<h3>Maaş Ödemeleri</h3>'+ma+'<h3>Düzeltmeler</h3>'+du;
+};
+window.doAvans=async function(e,id){e.preventDefault();await fetch('/api/admin/personel/avans',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({personel_id:id,tutar:avT.value,not:avN.value})});loadDetay();return false;};
+window.doIzin=async function(e,id){e.preventDefault();await fetch('/api/admin/personel/izin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({personel_id:id,baslangic:izB.value,bitis:izE.value,gun:izG.value})});loadDetay();return false;};
+window.doMaas=async function(e,id){e.preventDefault();await fetch('/api/admin/personel/maas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({personel_id:id,tutar:mT.value,donem:mD.value})});loadDetay();return false;};
+window.doDuz=async function(e,id){e.preventDefault();await fetch('/api/admin/personel/duzeltme',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({personel_id:id,tip:dTip.value,dakika:dDk.value,gerekce:dG.value})});loadDetay();return false;};
+
+async function loadRapor(){
+  var ay=new Date().toISOString().slice(0,7);
+  var d=await (await fetch('/api/admin/personel/ihlal')).json();
+  var ih=(d.kayitlar||[]).map(function(x){return '<div class="row"><span>'+esc(x.personel)+' · '+esc(x.tarih)+'</span><span class="tag" style="background:rgba(224,102,102,.18);color:#f0a">'+esc(x.tur)+'</span></div>';}).join('')||'<div class="empty">İhlal yok 👍</div>';
+  var tl=await (await fetch('/api/admin/personel/timeline')).json();
+  var trmap={giris:'Mesai Başladı',mola_basla:'Molaya Çıktı',mola_bitir:'Moladan Döndü',cikis:'Mesai Bitti'};
+  var tlh=(tl.kayitlar||[]).slice(0,40).map(function(x){return '<div class="row"><span>'+esc(x.ad)+'</span><span class="muted">'+esc(trmap[x.tip]||x.tip)+' · '+dt(x.ts)+'</span></div>';}).join('')||'<div class="empty">Kayıt yok</div>';
+  document.getElementById('v-rapor').innerHTML=
+    '<div class="card"><h3>Aylık Bordro</h3><form class="inline" onsubmit="return dlBordro(event)"><input id="bAy" value="'+ay+'" placeholder="YYYY-MM"><button class="b p">CSV indir (Excel)</button></form><p class="muted">Çalışma saati, düzeltme, avans ve maaş özetini indirir.</p></div>'
+    +'<div class="card"><h3>İhlal Raporu</h3>'+ih+'</div>'
+    +'<div class="card"><h3>Zaman Çizelgesi (son 24s)</h3>'+tlh+'</div>';
+}
+window.dlBordro=function(e){e.preventDefault();var ay=document.getElementById('bAy').value||'';window.open('/api/admin/personel/bordro.csv?ay='+encodeURIComponent(ay),'_blank');return false;};
+
+tab('canli');
+</script>
+</body>
+</html>
