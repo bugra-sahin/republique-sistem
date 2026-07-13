@@ -310,4 +310,39 @@ function sanitizeReply(t) {
   return String(t)
     .replace(/\*\*(.*?)\*\*/g, '$1')      // **kalin** -> kalin
     .replace(/(^|[^*])\*(?!\*)([^*\n]+?)\*(?!\*)/g, '$1$2') // *italik* -> italik
-    .replace(/^#{1,6}\s*/gm, '')            // ## baslik
+    .replace(/^#{1,6}\s*/gm, '')            // ## baslik -> baslik
+    .replace(/^\s*[-•]\s+/gm, '')           // - madde -> madde (satir basi)
+    .replace(/\n{3,}/g, '\n\n')             // fazla bos satiri kis
+    .trim();
+}
+
+// ANTHROPIC (Claude) cagrisi
+let _lastUsage = null;
+async function callAnthropic(system, msgs, apiKey, dynamicHint) {
+  const sys = [{ type: 'text', text: system, cache_control: { type: 'ephemeral', ttl: '1h' } }];
+  if (dynamicHint) sys.push({ type: 'text', text: dynamicHint });
+  const resp = await axios.post('https://api.anthropic.com/v1/messages', {
+    model: MODEL, max_tokens: 320,
+    system: sys,
+    messages: msgs
+  }, { headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-beta': 'extended-cache-ttl-2025-04-11', 'content-type': 'application/json' }, timeout: 20000 });
+  _lastUsage = (resp.data && resp.data.usage) || null;
+  if (resp.data && Array.isArray(resp.data.content)) return resp.data.content.map(c => c.text || '').join('').trim();
+  return '';
+}
+
+// GEMINI (Google AI Studio, ucretsiz kota) cagrisi
+async function callGemini(system, msgs, apiKey) {
+  const model = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+  const contents = msgs.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }));
+  const resp = await axios.post(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+    { system_instruction: { parts: [{ text: system }] }, contents, generationConfig: { maxOutputTokens: 500, temperature: 0.7 } },
+    { headers: { 'content-type': 'application/json' }, timeout: 20000 }
+  );
+  const cand = resp.data && resp.data.candidates && resp.data.candidates[0];
+  if (cand && cand.content && Array.isArray(cand.content.parts)) return cand.content.parts.map(p => p.text || '').join('').trim();
+  return '';
+}
+
+module.exports = { chatWithWaiter, flattenMenu };
