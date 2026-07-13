@@ -7,7 +7,7 @@ const db = require("./src/db");
 const multer = require("multer");
 const { processPosUpload } = require("./src/matcher");
 const { processCapiBatch } = require("./src/capi-sender");
-const { chatWithWaiter } = require("./src/ai-waiter");
+const { chatWithWaiter, flattenMenu } = require("./src/ai-waiter");
 
 // AI sohbet gecmisi tablosu (ilk ay+ kayit; ogrenme/analiz icin)
 db.query(`CREATE TABLE IF NOT EXISTS chat_logs (
@@ -220,6 +220,18 @@ app.get("/api/menu", (req, res) => {
   } else {
     res.status(500).json({ error: "Menu henuz hazir degil" });
   }
+});
+
+// GOOGLE-OKUR MENU: /menu JS-render oldugu icin Google/bot menuyu okuyamaz. Bu route menuyu
+// DUZ METIN olarak sunar (crawlable) -> arama/GBP menu icerigi + AI platformlari icin. Ayni veri.
+app.get("/menu.txt", (req, res) => {
+  const menu = getCachedMenu();
+  res.set("Content-Type", "text/plain; charset=utf-8");
+  if (!menu) return res.status(503).send("Menu henuz hazir degil.");
+  const bas = "Republique Tunalı — Menü\nBestekar Cd 65/B, Remzi Oğuz Arık Mah., Çankaya/Ankara\nTel: +90 552 656 51 59 · https://republique.tr/menu\nFiyatlar güncel (POS ile senkron). Kokteyl bar, geniş yemek ve içecek menüsü.\n\n";
+  // flattenMenu LLM'e ozel koseli-parantez notlarini temizle (Google icin sade metin)
+  let govde = flattenMenu(menu).replace(/\s*\[normal[^\]]*\]/g, "").replace(/\s*\[[^\]]*happy hour[^\]]*\]/gi, "");
+  res.send(bas + govde);
 });
 
 // ============ REPUBLIQUE AI GARSON ============
@@ -622,6 +634,7 @@ app.post("/api/admin/ads/approve-suggestion", async (req, res) => {
 require("./src/feedback").register(app, db);
 require("./src/personel").register(app, db);
 require("./src/uyelik").register(app, db);
+require("./src/google-ads").register(app, db);
 
 app.listen(PORT, "0.0.0.0", async () => {
   console.log("Republique app listening on " + PORT);
