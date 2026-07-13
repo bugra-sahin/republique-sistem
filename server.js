@@ -158,6 +158,11 @@ app.get("/menu/:table", (req, res) => {
 
 // Blog (SEO/GEO icerik) — temiz URL'ler. Dosyalar public/blog/ altinda.
 app.get("/blog", (req, res) => res.sendFile(path.join(__dirname, "public", "blog", "index.html")));
+// Blog stil dosyasi — :slug route'undan ONCE tanimla ki onu yutmasin.
+app.get("/blog/blog.css", (req, res) => {
+  res.set("Content-Type", "text/css; charset=utf-8");
+  res.sendFile(path.join(__dirname, "public", "blog", "blog.css"));
+});
 app.get("/blog/:slug", (req, res) => {
   const slug = String(req.params.slug || "").toLowerCase().replace(/[^a-z0-9-]/g, "");
   if (!slug) return res.redirect("/blog");
