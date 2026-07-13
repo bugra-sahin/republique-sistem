@@ -60,6 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
             rep_id,
             fbp,
             fbc,
+            referrer: document.referrer || '',
             ...params
           })
         });
@@ -135,79 +136,45 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    menuData.forEach((category, index) => {
-      if (category.isVisible === false || category.name === 'Personel' || category.name === 'Ekstra İstek') return; // Kategori gizliyse tamamen atla
-
-      // Üst menü butonu (Seviye 1: Menü Bölümü)
-      const btn = document.createElement('button');
-      btn.className = `cat-btn ${categoryElements.length === 0 ? 'active' : ''}`;
-      btn.innerText = category.name;
-      const catId = `cat-${index}`;
-      
-      btn.onclick = () => {
-        const target = document.getElementById(catId);
-        if (target) {
-          const yOffset = -70; // Sabit header boşluğu
-          const y = target.getBoundingClientRect().top + window.pageYOffset + yOffset;
-          window.scrollTo({top: y, behavior: 'smooth'});
-        }
-      };
-      categoryNav.appendChild(btn);
-
-      // Bu bölüm için ana kapsayıcı
-      const catSection = document.createElement('div');
-      catSection.id = catId;
-      catSection.className = 'category-section';
-      
-      categoryElements.push({ id: catId, btn: btn });
-
-      // Seviye 2: Kategoriler (Sections)
+    // Bir kategorinin urunlerini olusturan yardimci — TEMBEL RENDER icin ayri fonksiyon.
+    // 413 karti ilk anda hep birden olusturmak dusuk bellekli iPhone'da sekmeyi cokertip
+    // "sayfa yenilendi" yasatiyordu. Cozum: kartlari kategori ekrana yaklasinca olustur.
+    function fillCategory(catSection, category) {
+      if (catSection.dataset.filled) return;
+      catSection.dataset.filled = '1';
+      catSection.style.minHeight = '';
       if (category.sections && category.sections.length > 0) {
         category.sections.forEach(section => {
-          if (section.isVisible === false) return; // Gizliyse atla
-
+          if (section.isVisible === false) return;
           const secTitle = document.createElement('h2');
           secTitle.className = 'section-title';
           secTitle.innerText = section.name;
           catSection.appendChild(secTitle);
-
-          // Seviye 3: Ürünler (Products)
           if (section.products && section.products.length > 0) {
             section.products.forEach(product => {
               if (product.inStock === false) return;
-
               let itemsToRender = [];
               if (product.variations && product.variations.length > 0) {
                 product.variations.forEach(v => {
                   if (v.inStock === false) return;
                   itemsToRender.push({
-                    ...product,
-                    ...v, // Varyasyon özellikleri (fiyat, isim) ürünün üzerine yazar
+                    ...product, ...v,
                     name: `${product.name} ${v.name && v.name.toLowerCase() !== 'normal' ? '- ' + v.name : ''}`.trim(),
                     description: v.description || product.description,
                     happyHourInfo: v.happyHourInfo || product.happyHourInfo
                   });
                 });
-              } else {
-                itemsToRender.push(product);
-              }
-
+              } else { itemsToRender.push(product); }
               itemsToRender.forEach(item => {
                 const pCard = document.createElement('div');
                 pCard.className = 'product-card';
-                
-                // SVG'yi base64 yaptık ki tarayıcılar kırık imaj sanmasın
                 const defaultImg = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI5MCIgaGVpZ2h0PSI5MCIgZmlsbD0iIzBhMWYxNiI+PHJlY3Qgd2lkdGg9IjkwIiBoZWlnaHQ9IjkwIiBmaWxsPSIjMDUxMDBjIi8+PHRleHQgeD0iNDUiIHk9IjQ1IiBmaWxsPSIjZDRhZjM3IiBmb250LXNpemU9IjEyIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgYWxpZ25tZW50LWJhc2VsaW5lPSJtaWRkbGUiPlJFUFVCTElRVUU8L3RleHQ+PC9zdmc+';
                 const imgSrc = item.image ? item.image : (product.image ? product.image : defaultImg);
-
                 const priceInfo = getActivePrice(item);
                 let priceHtml = '';
                 if (priceInfo.isDiscount) {
                   priceHtml = `<span style="text-decoration: line-through; opacity: 0.6; font-size: 0.9em; margin-right: 5px;">${priceInfo.originalPrice} ₺</span><span style="color: #d4af37; font-weight: bold; font-size: 1.1em;">${priceInfo.price} ₺</span>`;
-                } else {
-                  priceHtml = `${priceInfo.price} ₺`;
-                }
-
+                } else { priceHtml = `${priceInfo.price} ₺`; }
                 pCard.innerHTML = `
                   <img src="${imgSrc}" class="product-img" alt="${item.name}" loading="lazy" decoding="async" onerror="this.src='${defaultImg}'">
                   <div class="product-info">
@@ -222,9 +189,51 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         });
       }
+    }
 
+    const pending = [];
+    menuData.forEach((category, index) => {
+      if (category.isVisible === false || category.name === 'Personel' || category.name === 'Ekstra İstek') return;
+      const btn = document.createElement('button');
+      btn.className = `cat-btn ${categoryElements.length === 0 ? 'active' : ''}`;
+      btn.innerText = category.name;
+      const catId = `cat-${index}`;
+      btn.onclick = () => {
+        const target = document.getElementById(catId);
+        if (target) {
+          fillCategory(target, category); // tiklaninca hemen doldur (bos kalmasin)
+          const yOffset = -70;
+          const y = target.getBoundingClientRect().top + window.pageYOffset + yOffset;
+          window.scrollTo({ top: y, behavior: 'smooth' });
+        }
+      };
+      categoryNav.appendChild(btn);
+      const catSection = document.createElement('div');
+      catSection.id = catId;
+      catSection.className = 'category-section';
+      catSection.style.minHeight = '60px'; // bos kategori tetiklenebilsin
+      categoryElements.push({ id: catId, btn: btn });
       menuContainer.appendChild(catSection);
+      pending.push({ catSection: catSection, category: category });
     });
+
+    // TEMBEL RENDER: kategori ekrana ~800px yaklasinca urunlerini olustur.
+    if ('IntersectionObserver' in window) {
+      const io = new IntersectionObserver((entries) => {
+        entries.forEach(e => {
+          if (e.isIntersecting) {
+            const rec = pending.find(p => p.catSection === e.target);
+            if (rec) { fillCategory(rec.catSection, rec.category); io.unobserve(e.target); }
+          }
+        });
+      }, { rootMargin: '800px 0px' });
+      pending.forEach(p => io.observe(p.catSection));
+    } else {
+      pending.forEach(p => fillCategory(p.catSection, p.category));
+    }
+    // Ilk 2 kategoriyi hemen doldur (sayfa acilir acilmaz bos gorunmesin)
+    if (pending[0]) fillCategory(pending[0].catSection, pending[0].category);
+    if (pending[1]) fillCategory(pending[1].catSection, pending[1].category);
 
     setupScrollSpy();
   }
