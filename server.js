@@ -151,6 +151,20 @@ app.get("/menu/:table", (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// Blog (SEO/GEO icerik) — temiz URL'ler. Dosyalar public/blog/ altinda.
+app.get("/blog", (req, res) => res.sendFile(path.join(__dirname, "public", "blog", "index.html")));
+app.get("/blog/:slug", (req, res) => {
+  const slug = String(req.params.slug || "").toLowerCase().replace(/[^a-z0-9-]/g, "");
+  if (!slug) return res.redirect("/blog");
+  const fs = require("fs");
+  const dir = path.join(__dirname, "public", "blog");
+  for (const c of [slug + ".html", "blog-" + slug + ".html"]) {
+    const f = path.join(dir, c);
+    if (fs.existsSync(f)) return res.sendFile(f);
+  }
+  res.status(404).sendFile(path.join(__dirname, "public", "blog", "index.html"));
+});
+
 app.get("/api/menu", (req, res) => {
   const menu = getCachedMenu();
   if (menu) {
@@ -516,14 +530,16 @@ app.listen(PORT, "0.0.0.0", async () => {
   });
   // Menu bos ise otomatik tekrar cek (puppeteer ara sira basarisiz oluyor). Kalici volume (menudata)
   // sayesinde bir kez yuklenince restart'ta hemen hazir olur.
+  // Menu bossa tekrar cek — 5 dakikada bir (agir Puppeteer'i sik cagirmamak icin; onceden 60sn idi -> OOM/AI-restart riski)
   setInterval(() => {
     if (!getCachedMenu()) {
       console.log("Menu bos, tekrar cekiliyor...");
       updateMenu().catch(err => console.error("Menu retry hatasi:", err.message));
     }
-  }, 60000);
-  // 30 dakikada bir tazele (fiyat/stok degisimi Firestore push disinda da yakalansin)
+  }, 300000);
+  // Periyodik tazeleme — 3 saatte bir (fiyat/stok Firestore push ile zaten aninda gelir; happy-hour fiyati
+  // menu verisinden ISTEMCIDE hesaplaniyor, sik refresh gerekmez). Puppeteer yukunu azaltir.
   setInterval(() => {
     updateMenu().catch(err => console.error("Menu periyodik guncelleme hatasi:", err.message));
-  }, 30 * 60000);
+  }, 3 * 3600000);
 });
