@@ -25,6 +25,11 @@ db.query(`CREATE TABLE IF NOT EXISTS section_views (
 )`).catch(e => console.error("section_views tablo:", e.message));
 db.query(`ALTER TABLE section_views ADD COLUMN IF NOT EXISTS kind TEXT DEFAULT 'section'`).catch(() => {});
 
+// Istemci-tarafi hata/cokme kayitlari (telefonda olusan, sunucu logunda gorunmeyen sorunlar)
+db.query(`CREATE TABLE IF NOT EXISTS client_logs (
+  id SERIAL PRIMARY KEY, tip TEXT, mesaj TEXT, kaynak TEXT, stack TEXT, url TEXT, masa TEXT, ua TEXT, ip TEXT, created_at TIMESTAMPTZ DEFAULT now()
+)`).catch(e => console.error("client_logs tablo:", e.message));
+
 // LLM anahtarlarini kalici gizli dosyadan yukle (/secrets/llm.env)
 (function loadLlmSecrets() {
   try {
@@ -125,7 +130,7 @@ app.get("/health", (req, res) => {
 });
 
 // Admin alt-URL'ler: her bolum kendi adresinde (deep-link/refresh calisir). Shell (index.html) sunulur.
-app.get(["/admin", "/admin/canli", "/admin/rapor", "/admin/sohbetler", "/admin/gorusler", "/admin/personel", "/admin/audit", "/admin/reklam", "/admin/cari"], (req, res) => {
+app.get(["/admin", "/admin/canli", "/admin/rapor", "/admin/sohbetler", "/admin/gorusler", "/admin/personel", "/admin/hatalar", "/admin/audit", "/admin/reklam", "/admin/cari"], (req, res) => {
   res.sendFile(path.join(__dirname, "public", "admin", "index.html"));
 });
 
@@ -205,6 +210,30 @@ app.post("/api/track-dwell", async (req, res) => {
     }
     res.json({ ok: true });
   } catch (e) { res.status(200).json({ ok: false }); }
+});
+
+// Istemci-tarafi hata loglama (telefondan gelen JS hatasi/cokme/donma)
+app.post("/api/client-log", async (req, res) => {
+  try {
+    const b = req.body || {};
+    const ip = (req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0].trim();
+    db.query("INSERT INTO client_logs (tip, mesaj, kaynak, stack, url, masa, ua, ip) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+      [String(b.tip || 'js').slice(0, 20), String(b.mesaj || '').slice(0, 500), String(b.kaynak || '').slice(0, 300),
+       String(b.stack || '').slice(0, 1200), String(b.url || '').slice(0, 300), String(b.masa || '').slice(0, 50),
+       String(b.ua || '').slice(0, 300), ip]).catch(() => {});
+    res.json({ ok: true });
+  } catch (e) { res.status(200).json({ ok: false }); }
+});
+
+// Admin: istemci hata kayitlari
+app.get("/api/admin/client-logs", async (req, res) => {
+  try {
+    const days = Math.min(90, parseInt(req.query.days) || 7);
+    const { rows } = await db.query(
+      "SELECT id, tip, mesaj, kaynak, stack, url, masa, ua, ip, created_at FROM client_logs WHERE created_at >= now() - ($1||' days')::interval ORDER BY created_at DESC LIMIT 500", [String(days)]);
+    const ozet = await db.query("SELECT tip, COUNT(*)::int c FROM client_logs WHERE created_at >= now() - interval '7 days' GROUP BY tip");
+    res.json({ ok: true, kayitlar: rows, ozet: ozet.rows });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 // En cok bakilan urunler (admin)
