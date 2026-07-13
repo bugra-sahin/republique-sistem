@@ -1,9 +1,9 @@
-# Republique Social House
+# Republique Tunalı
 > Ankara Tunalı Hilmi'de (Çankaya) sosyal mekan / cocktail & social house. İmza kokteyller,
 > geniş yemek ve içecek menüsü, sıcak atmosfer. Menü metin tabanlı ve günceldir.
 
 ## Temel bilgiler
-- Ad: Republique Social House
+- Ad: Republique Tunalı
 - Konum: Tunalı Hilmi Caddesi, Çankaya, Ankara, Türkiye
 - Menü (makine-okur): https://republique.tr/menu
 - Google değerlendirme: https://g.page/r/CXmH-0MBy7JKEBM/review
