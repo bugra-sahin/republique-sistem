@@ -204,8 +204,10 @@
               const b = btns[idx];
               if (b) b.click(); // aktif kategori rozeti + tembel render tetigi
               const sec = idx >= 0 ? document.getElementById('cat-' + idx) : null;
-              if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              else if (b) b.scrollIntoView({ behavior: 'smooth' });
+              // NOT: behavior:'smooth' tembel-render (content-visibility) ile bu sayfada
+              //      calismiyor (0'da kaliyor) -> 'instant' guvenilir sekilde hedefe atlar.
+              if (sec) sec.scrollIntoView({ behavior: 'instant', block: 'start' });
+              else if (b) b.scrollIntoView({ behavior: 'instant', block: 'start' });
             } catch (e) {}
           }, 80);
         });
