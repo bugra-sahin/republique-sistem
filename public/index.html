@@ -13,6 +13,16 @@
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Playfair+Display:ital,wght@0,600;1,600&display=swap" rel="stylesheet">
   <!-- Material Icons -->
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+
+  <!-- PWA: ana ekrana ekle / app hissi -->
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#05100c">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Republique">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-180.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
   
   <!-- Meta Pixel Code -->
   <script>
@@ -67,10 +77,19 @@
   </footer>
 
   <script src="/js/clientlog.js"></script>
+  <script src="/js/trail-record.js"></script>
   <script src="/js/app.js"></script>
   <script src="/js/menu-detail.js"></script>
   <script src="/js/ai-chat.js"></script>
   <script src="/js/engagement.js"></script>
   <script src="/js/feedback.js"></script>
+  <!-- PWA service worker kaydi (hata olsa da sayfayi bozmaz) -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('/sw.js').catch(function () {});
+      });
+    }
+  </script>
 </body>
 </html>

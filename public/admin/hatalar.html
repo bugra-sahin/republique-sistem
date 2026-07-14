@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>İstemci Hataları</title>
+<title>İstemci Hataları & Davranış</title>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
 <style>
   :root{--bg:#05100c;--panel:#0a1f16;--line:rgba(212,175,55,.18);--ink:#f5f5f5;--muted:#a0aab2;--gold:#d4af37}
@@ -15,54 +15,107 @@
   .bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
   select,button{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:9px;padding:8px 11px;font-family:inherit;font-size:13px;cursor:pointer}
   .stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
-  .stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:11px 15px;min-width:100px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:11px 15px;min-width:96px}
   .stat b{display:block;font-size:22px;color:var(--gold)}
   .stat span{font-size:12px;color:var(--muted)}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:9px}
-  .card.donma,.card.js,.card.promise{border-left:4px solid #e06666}
+  .card.donma,.card.js,.card.promise,.card.reload{border-left:4px solid #e06666}
   .card.kaynak{border-left:4px solid #d4af37}
+  .card.rage{border-left:4px solid #ff8c42}
+  .card.dead{border-left:4px solid #e6c84c}
+  .card.netfail{border-left:4px solid #8a5cf6}
+  .card.console{border-left:4px solid #7f8c99}
   .meta{display:flex;gap:9px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-bottom:6px;align-items:center}
-  .tag{padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;background:rgba(224,102,102,.18);color:#f0a}
+  .tag{padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;background:rgba(224,102,102,.18);color:#f7a}
   .tag.kaynak{background:rgba(212,175,55,.18);color:var(--gold)}
+  .tag.rage{background:rgba(255,140,66,.2);color:#ffb27a}
+  .tag.dead{background:rgba(230,200,76,.2);color:#efd97a}
+  .tag.netfail{background:rgba(138,92,246,.2);color:#b9a3f7}
+  .tag.console{background:rgba(127,140,153,.2);color:#c3ccd6}
   .msg{font-size:14px;line-height:1.45;word-break:break-word}
   .src{font-family:monospace;font-size:11px;color:#9bf;margin-top:4px;word-break:break-all}
   .stack{font-family:monospace;font-size:11px;color:var(--muted);white-space:pre-wrap;margin-top:6px;max-height:120px;overflow:auto;background:var(--bg);border-radius:8px;padding:8px}
   .empty{color:var(--muted);text-align:center;padding:40px}
+  .replay-btn{margin-top:8px;font-size:12px;padding:6px 12px;border-radius:8px;background:#132a20;color:var(--gold);border:1px solid var(--line)}
+  .trail{margin-top:8px;background:var(--bg);border-radius:8px;padding:10px;max-height:260px;overflow:auto;font-size:12px}
+  .trow{display:flex;gap:10px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+  .tt{color:var(--gold);min-width:56px;font-family:monospace}
+  .tk{color:var(--muted);min-width:78px}
+  .td{color:var(--ink);word-break:break-word}
 </style>
 </head>
 <body>
-  <h1>İstemci (Telefon/Tarayıcı) Hataları</h1>
-  <div class="sub">Misafirlerin cihazında oluşan, sunucu logunda GÖRÜNMEYEN hatalar/çökmeler burada. "donma" = sayfa kilitlenmesi (Safari çökmesi riski).</div>
+  <h1>İstemci (Telefon/Tarayıcı) Hataları & Davranış</h1>
+  <div class="sub">Misafirlerin cihazında oluşan, sunucu logunda GÖRÜNMEYEN sorunlar. Hem çökmeler (donma/JS) hem kullanıcı sürtünmesi (öfke/ölü tıklama, yenilenme döngüsü, yavaş API) burada. "İzi göster" ile hata öncesi son ~30 sn'de kullanıcının ne yaptığını görebilirsiniz.</div>
   <div class="stats" id="stats"></div>
   <div class="bar">
-    <select id="fTip"><option value="">Tüm tipler</option><option value="donma">Donma/kilitlenme</option><option value="js">JS hatası</option><option value="promise">Promise</option><option value="kaynak">Kaynak (görsel/script)</option></select>
+    <select id="fTip">
+      <option value="">Tüm tipler</option>
+      <option value="donma">Donma/kilitlenme</option>
+      <option value="js">JS hatası</option>
+      <option value="promise">Promise</option>
+      <option value="kaynak">Kaynak (görsel/script)</option>
+      <option value="rage">Öfke tıklama</option>
+      <option value="dead">Ölü tıklama</option>
+      <option value="reload">Yenilenme döngüsü</option>
+      <option value="netfail">Ağ/API</option>
+      <option value="console">Konsol</option>
+    </select>
     <select id="fDays"><option value="1">Son 1 gün</option><option value="7" selected>Son 7 gün</option><option value="30">Son 30 gün</option></select>
     <button onclick="load()">Yenile</button>
   </div>
   <div id="list"></div>
 <script>
+var ETIKET={donma:'Donma',js:'JS hatası',promise:'Promise',kaynak:'Kaynak',rage:'Öfke tıklama',dead:'Ölü tıklama',reload:'Yenilenme döngüsü',netfail:'Ağ/API',console:'Konsol',test:'Test'};
+var IZTIP={start:'başlangıç',click:'tıklama',focus:'alan odağı',scroll:'kaydırma',hide:'sekme arka plan',show:'sekme ön plan',pagehide:'sayfadan çıkış','ai-panel':'AI panel','urun-karti':'ürün kartı'};
 function esc(s){return String(s==null?'':s).replace(/[<>&]/g,function(c){return({'<':'&lt;','>':'&gt;','&':'&amp;'})[c];});}
 function dt(s){try{return new Date(s).toLocaleString('tr-TR');}catch(e){return s||'';}}
 function dev(ua){ua=ua||'';if(/iphone/i.test(ua))return'iPhone';if(/ipad/i.test(ua))return'iPad';if(/android/i.test(ua))return'Android';if(/mac/i.test(ua))return'Mac';if(/windows/i.test(ua))return'Windows';return'Diğer';}
+function izDetay(e){
+  if(e.type==='click')return (e.el||'')+(e.tag?' ('+e.tag.toLowerCase()+')':'');
+  if(e.type==='focus')return e.field||'';
+  if(e.type==='scroll')return 'y='+(e.y||0);
+  if(e.type==='start')return (e.url||'').replace(location.origin,'');
+  if(e.type==='ai-panel'||e.type==='urun-karti')return e.open?'açıldı':'kapandı';
+  return '';
+}
+async function gosterIz(eid,btn){
+  var box=btn.nextElementSibling;
+  if(box&&box.classList.contains('trail')){box.remove();btn.textContent='🎞 İzi göster';return;}
+  btn.textContent='yükleniyor…';
+  try{
+    var r=await fetch('/api/admin/client-replay?eid='+encodeURIComponent(eid));var d=await r.json();
+    btn.textContent='🎞 İzi gizle';
+    if(!d.bulundu||!d.events||!d.events.length){var n=document.createElement('div');n.className='trail';n.textContent='Bu olay için kayıtlı iz yok.';btn.after(n);return;}
+    var t0=d.events[0].t;
+    var html=d.events.map(function(e){
+      var rel=((e.t-t0)/1000).toFixed(1)+'s';
+      return '<div class="trow"><span class="tt">+'+rel+'</span><span class="tk">'+(IZTIP[e.type]||e.type)+'</span><span class="td">'+esc(izDetay(e))+'</span></div>';
+    }).join('');
+    var box2=document.createElement('div');box2.className='trail';box2.innerHTML=html;btn.after(box2);
+  }catch(e){btn.textContent='🎞 İzi göster';alert('İz yüklenemedi: '+e);}
+}
 async function load(){
   var tip=document.getElementById('fTip').value,days=document.getElementById('fDays').value;
   var r=await fetch('/api/admin/client-logs?days='+days); var d=await r.json();
-  var sum={donma:0,js:0,promise:0,kaynak:0};(d.ozet||[]).forEach(function(x){sum[x.tip]=x.c;});
-  document.getElementById('stats').innerHTML=
-    '<div class="stat"><b style="color:#f0a">'+(sum.donma||0)+'</b><span>donma/kilitlenme</span></div>'
-    +'<div class="stat"><b>'+(sum.js||0)+'</b><span>JS hatası</span></div>'
-    +'<div class="stat"><b>'+(sum.promise||0)+'</b><span>promise</span></div>'
-    +'<div class="stat"><b>'+(sum.kaynak||0)+'</b><span>kaynak</span></div>';
+  var sum={};(d.ozet||[]).forEach(function(x){sum[x.tip]=x.c;});
+  var order=['donma','js','promise','kaynak','rage','dead','reload','netfail','console'];
+  document.getElementById('stats').innerHTML=order.map(function(t){
+    return '<div class="stat"><b>'+(sum[t]||0)+'</b><span>'+(ETIKET[t]||t)+'</span></div>';
+  }).join('');
   var rows=(d.kayitlar||[]);if(tip)rows=rows.filter(function(x){return x.tip===tip;});
   var el=document.getElementById('list');
-  if(!rows.length){el.innerHTML='<div class="empty">Kayıt yok 👍 (istemci tarafında hata görünmüyor)</div>';return;}
+  if(!rows.length){el.innerHTML='<div class="empty">Kayıt yok 👍 (istemci tarafında hata/sürtünme görünmüyor)</div>';return;}
   el.innerHTML=rows.map(function(k){
-    return '<div class="card '+k.tip+'"><div class="meta"><span class="tag '+k.tip+'">'+k.tip+'</span>'
+    var etk=ETIKET[k.tip]||k.tip;
+    return '<div class="card '+k.tip+'"><div class="meta"><span class="tag '+k.tip+'">'+etk+'</span>'
       +'<span>'+dev(k.ua)+'</span>'+(k.masa?'<span>Masa: '+esc(k.masa)+'</span>':'')+'<span>'+dt(k.created_at)+'</span></div>'
       +'<div class="msg">'+esc(k.mesaj)+'</div>'
       +(k.kaynak?'<div class="src">'+esc(k.kaynak)+'</div>':'')
       +(k.url?'<div class="src">'+esc(k.url)+'</div>':'')
-      +(k.stack?'<div class="stack">'+esc(k.stack)+'</div>':'')+'</div>';
+      +(k.stack?'<div class="stack">'+esc(k.stack)+'</div>':'')
+      +(k.replay?'<button class="replay-btn" onclick="gosterIz(\''+esc(k.eid)+'\',this)">🎞 İzi göster</button>':'')
+      +'</div>';
   }).join('');
 }
 load();

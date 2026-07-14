@@ -55,6 +55,11 @@
   .rai-send{background:#d4af37;border:none;color:#05100c;border-radius:12px;padding:0 16px;font-weight:700;cursor:pointer}
   .rai-send:disabled{opacity:.5}
   .rai-wait{align-self:flex-start;color:#d4af37;font-size:13px;font-style:italic}
+  .rai-actbtn{align-self:flex-start;background:linear-gradient(135deg,#0a1f16,#05100c);color:#f3d573;
+    border:1px solid rgba(212,175,55,.55);border-radius:12px;padding:9px 14px;font-size:13.5px;font-weight:600;
+    cursor:pointer;margin-top:-2px;font-family:'Outfit',system-ui,sans-serif;transition:.15s}
+  .rai-actbtn:hover{background:#0e2a1e}
+  .rai-actbtn:disabled{opacity:.5;cursor:default}
   .rai-typing{align-self:flex-start;color:#a0aab2;font-size:13px;font-style:italic}
   @media(max-width:520px){
     .rai-panel{right:0;left:0;bottom:0;top:auto;width:100%;height:88vh;height:88dvh;border-radius:18px 18px 0 0;border-left:0;border-right:0;border-bottom:0}
@@ -90,6 +95,18 @@
     d.textContent = text;
     body.appendChild(d); body.scrollTop = body.scrollHeight;
     return d;
+  }
+  // Sohbet icine DOKUNULABILIR eylem butonu (bolum/urun goster). Ekrani otomatik kaydirmaz;
+  // sadece kullanici dokununca calisir. Tek kullanimlik (dokununca kendini pasiflestirir).
+  function addActionBtn(label, onTap) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'rai-actbtn'; b.textContent = label;
+    b.addEventListener('click', function () {
+      if (b.disabled) return; b.disabled = true;
+      try { onTap(); } catch (e) {}
+    });
+    body.appendChild(b); body.scrollTop = body.scrollHeight;
+    return b;
   }
   const isMobile = () => window.matchMedia('(max-width:520px)').matches;
   let savedScrollY = 0;
@@ -168,15 +185,37 @@
         g.style.cssText = "align-self:flex-start;display:inline-block;background:#1a73e8;color:#fff;text-decoration:none;border-radius:12px;padding:9px 14px;font-size:13px;font-weight:600;margin-top:-2px";
         body.appendChild(g); body.scrollTop = body.scrollHeight;
       }
+      // ONEMLI (UX): Ekrani KULLANICI ADINA otomatik kaydirma/acma YOK. AI bir bolum/urun
+      // isaret ederse, sohbete DOKUNULABILIR bir buton koyariz; kullanici isterse dokunur.
+      // (Eski davranis: otomatik b.click()/raiShowProduct + gecikmeli setTimeout -> "kendiliginden
+      //  kokteyl acildi/sayfa kaydi" sikayeti. Artik sadece kullanici hareketiyle.)
       if (data && data.goto) {
-        const norm = x => String(x).toLowerCase().replace(/ı/g,'i').replace(/ü/g,'u').replace(/ö/g,'o').replace(/ç/g,'c').replace(/ş/g,'s').replace(/ğ/g,'g').replace(/[^a-z0-9]/g,'');
-        const g = norm(data.goto); const btns = [...document.querySelectorAll('.cat-btn')];
-        let b = btns.find(x => norm(x.textContent) === g) || btns.find(x => norm(x.textContent).includes(g) || g.includes(norm(x.textContent)));
-        if (b) { close(); setTimeout(() => b.click(), 250); }
+        addActionBtn(data.goto + ' bölümüne git', function () {
+          const norm = x => String(x).toLowerCase().replace(/ı/g,'i').replace(/ü/g,'u').replace(/ö/g,'o').replace(/ç/g,'c').replace(/ş/g,'s').replace(/ğ/g,'g').replace(/[^a-z0-9]/g,'');
+          const g = norm(data.goto); const btns = [...document.querySelectorAll('.cat-btn')];
+          let idx = btns.findIndex(x => norm(x.textContent) === g);
+          if (idx < 0) idx = btns.findIndex(x => norm(x.textContent).includes(g) || g.includes(norm(x.textContent)));
+          close();
+          // Panel kapandiktan sonra (body kilidi cozulunce) HEDEF BOLUME kaydir.
+          // NOT: cat-btn.click() programatik cagride kaydirmiyor (app.js davranisi) -> ilgili
+          //      #cat-{index} bolumune DOGRUDAN scrollIntoView (guvenilir) + aktif rozet icin click.
+          setTimeout(function () {
+            try {
+              const b = btns[idx];
+              if (b) b.click(); // aktif kategori rozeti + tembel render tetigi
+              const sec = idx >= 0 ? document.getElementById('cat-' + idx) : null;
+              if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              else if (b) b.scrollIntoView({ behavior: 'smooth' });
+            } catch (e) {}
+          }, 80);
+        });
       }
-      // AI bir urunu gostermek isterse: kartini (foto+detay) ac
-      if (data && data.show && typeof window.raiShowProduct === 'function') {
-        close(); setTimeout(() => window.raiShowProduct(data.show), 300);
+      // AI bir urunu gostermek isterse: DOKUNULABILIR buton -> kullanici dokununca kartini (foto+detay) ac
+      if (data && data.show) {
+        addActionBtn(data.show + ' kartını aç', function () {
+          close();
+          setTimeout(function () { if (typeof window.raiShowProduct === 'function') { try { window.raiShowProduct(data.show); } catch (e) {} } }, 80);
+        });
       }
     } catch (e) { typing.remove(); addMsg('assistant', 'Bağlantı sorunu yaşadım, birazdan tekrar deneyin.'); }
     finally { sendBtn.disabled = false; }

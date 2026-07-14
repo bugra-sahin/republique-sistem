@@ -1,0 +1,13 @@
+{
+  "name": "republique-mobile-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Otonom mobil on-test (Playwright cihaz emulasyonu). Sunucuda/CI'da calisir.",
+  "scripts": {
+    "test": "node mobile-check.js",
+    "setup": "npm i -D playwright && npx playwright install --with-deps chromium"
+  },
+  "devDependencies": {
+    "playwright": "^1.47.0"
+  }
+}
