@@ -249,6 +249,23 @@ document.addEventListener('DOMContentLoaded', () => {
     if (pending[0]) fillCategory(pending[0].catSection, pending[0].category);
     if (pending[1]) fillCategory(pending[1].catSection, pending[1].category);
 
+    // GUVENLIK AGI (KRITIK — OPUS-GOREV IS1): IntersectionObserver bazi kosullarda (ornek: body'de
+    // eski overflow, veya script-scroll) tetiklenmiyor -> kaydiran misafir cat-2..cat-5'i goremiyordu.
+    // Cozum: kalan kategorileri arka planda SIRAYLA (400ms arayla) doldur. Boylece observer'a bagimli
+    // olmadan hepsi ~2-3sn icinde gorunur; ACILISTA yine ~117 kart (bellek korunur) + hepsi AYNI ANDA
+    // cizilmez (jetsam/jank yok, mobil cokme onlemi bozulmaz). content-visibility ekran-disini ucuzlatir.
+    (function backfillRemaining() {
+      let i = 0;
+      function step() {
+        while (i < pending.length && pending[i].catSection.dataset.filled) i++;
+        if (i >= pending.length) return;
+        try { fillCategory(pending[i].catSection, pending[i].category); } catch (e) {}
+        i++;
+        if (i < pending.length) setTimeout(step, 400);
+      }
+      setTimeout(step, 1200); // once observer/scroll sansini ver, sonra garanti doldur
+    })();
+
     // AI [[SHOW:Urun]] icin: SADECE o urunun kategorisini doldur (413 kartin HEPSINI birden cizmek
     // dusuk-bellekli iPhone'da sekmeyi cokertiyordu -> "isterim/gin severim" sonrasi sayfa yenileniyordu).
     function _norm(x){return String(x||'').toLowerCase().replace(/ı/g,'i').replace(/İ/g,'i').replace(/ş/g,'s').replace(/ğ/g,'g').replace(/ü/g,'u').replace(/ö/g,'o').replace(/ç/g,'c').replace(/[^a-z0-9]/g,'');}
