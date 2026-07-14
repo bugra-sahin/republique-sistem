@@ -29,6 +29,14 @@ db.query(`ALTER TABLE section_views ADD COLUMN IF NOT EXISTS kind TEXT DEFAULT '
 db.query(`CREATE TABLE IF NOT EXISTS client_logs (
   id SERIAL PRIMARY KEY, tip TEXT, mesaj TEXT, kaynak TEXT, stack TEXT, url TEXT, masa TEXT, ua TEXT, ip TEXT, created_at TIMESTAMPTZ DEFAULT now()
 )`).catch(e => console.error("client_logs tablo:", e.message));
+// Davranis izleme: oturum + olay kimligi (rrweb replay ile eslestirme)
+db.query("ALTER TABLE client_logs ADD COLUMN IF NOT EXISTS sid TEXT").catch(() => {});
+db.query("ALTER TABLE client_logs ADD COLUMN IF NOT EXISTS eid TEXT").catch(() => {});
+// rrweb "hata-ani" session replay kayitlari (self-host; 3. tarafa veri gitmez). Otomatik 7 gun sonra silinir.
+db.query(`CREATE TABLE IF NOT EXISTS client_replays (
+  id SERIAL PRIMARY KEY, eid TEXT, sid TEXT, tip TEXT, url TEXT, masa TEXT, ua TEXT, events JSONB, created_at TIMESTAMPTZ DEFAULT now()
+)`).catch(e => console.error("client_replays tablo:", e.message));
+db.query("CREATE INDEX IF NOT EXISTS idx_client_replays_eid ON client_replays(eid)").catch(() => {});
 
 // Trafik atifi: scans tablosuna kaynak turu + referrer + tekrar-gelen bayragi ekle (varsa atla).
 db.query("ALTER TABLE scans ADD COLUMN IF NOT EXISTS kaynak_tur TEXT").catch(e => console.error("scans kaynak_tur:", e.message));
@@ -297,12 +305,41 @@ app.post("/api/client-log", async (req, res) => {
   try {
     const b = req.body || {};
     const ip = (req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0].trim();
-    db.query("INSERT INTO client_logs (tip, mesaj, kaynak, stack, url, masa, ua, ip) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+    db.query("INSERT INTO client_logs (tip, mesaj, kaynak, stack, url, masa, ua, ip, sid, eid) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
       [String(b.tip || 'js').slice(0, 20), String(b.mesaj || '').slice(0, 500), String(b.kaynak || '').slice(0, 300),
        String(b.stack || '').slice(0, 1200), String(b.url || '').slice(0, 300), String(b.masa || '').slice(0, 50),
-       String(b.ua || '').slice(0, 300), ip]).catch(() => {});
+       String(b.ua || '').slice(0, 300), ip, String(b.sid || '').slice(0, 40), String(b.eid || '').slice(0, 60)]).catch(() => {});
     res.json({ ok: true });
   } catch (e) { res.status(200).json({ ok: false }); }
+});
+
+// Istemci "hata-ani" rrweb replay kaydi (son ~30sn). Sadece hata olunca gonderilir. KVKK: self-host, 3. tarafa gitmez.
+app.post("/api/client-replay", async (req, res) => {
+  try {
+    const b = req.body || {};
+    let events = b.events;
+    if (!Array.isArray(events) || !events.length) return res.status(200).json({ ok: false });
+    if (events.length > 2000) events = events.slice(-2000); // asiri buyuk kaydi kirp
+    const ip = (req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0].trim();
+    db.query("INSERT INTO client_replays (eid, sid, tip, url, masa, ua, events) VALUES ($1,$2,$3,$4,$5,$6,$7)",
+      [String(b.eid || '').slice(0, 60), String(b.sid || '').slice(0, 40), String(b.tip || '').slice(0, 20),
+       String(b.url || '').slice(0, 300), String(b.masa || '').slice(0, 50), String(b.ua || '').slice(0, 300),
+       JSON.stringify(events)]).catch(e2 => console.error("client_replays insert:", e2.message));
+    // Eski replay'leri temizle (7 gunden eski)
+    db.query("DELETE FROM client_replays WHERE created_at < now() - interval '7 days'").catch(() => {});
+    res.json({ ok: true });
+  } catch (e) { res.status(200).json({ ok: false }); }
+});
+
+// Admin: bir olayin rrweb replay olaylarini getir (oynatici hatalar.html'de)
+app.get("/api/admin/client-replay", async (req, res) => {
+  try {
+    const eid = String(req.query.eid || '').slice(0, 60);
+    if (!eid) return res.status(400).json({ ok: false, error: "eid gerekli" });
+    const { rows } = await db.query("SELECT events, tip, url, masa, ua, created_at FROM client_replays WHERE eid = $1 ORDER BY id DESC LIMIT 1", [eid]);
+    if (!rows.length) return res.json({ ok: true, bulundu: false });
+    res.json({ ok: true, bulundu: true, events: rows[0].events, meta: { tip: rows[0].tip, url: rows[0].url, masa: rows[0].masa, ua: rows[0].ua, created_at: rows[0].created_at } });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 // Admin: istemci hata kayitlari
@@ -310,7 +347,7 @@ app.get("/api/admin/client-logs", async (req, res) => {
   try {
     const days = Math.min(90, parseInt(req.query.days) || 7);
     const { rows } = await db.query(
-      "SELECT id, tip, mesaj, kaynak, stack, url, masa, ua, ip, created_at FROM client_logs WHERE created_at >= now() - ($1||' days')::interval ORDER BY created_at DESC LIMIT 500", [String(days)]);
+      "SELECT l.id, l.tip, l.mesaj, l.kaynak, l.stack, l.url, l.masa, l.ua, l.ip, l.sid, l.eid, l.created_at, (r.eid IS NOT NULL) AS replay FROM client_logs l LEFT JOIN client_replays r ON r.eid = l.eid WHERE l.created_at >= now() - ($1||' days')::interval ORDER BY l.created_at DESC LIMIT 500", [String(days)]);
     const ozet = await db.query("SELECT tip, COUNT(*)::int c FROM client_logs WHERE created_at >= now() - interval '7 days' GROUP BY tip");
     res.json({ ok: true, kayitlar: rows, ozet: ozet.rows });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
