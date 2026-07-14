@@ -192,15 +192,29 @@
       if (data && data.goto) {
         addActionBtn(data.goto + ' bölümüne git', function () {
           const norm = x => String(x).toLowerCase().replace(/ı/g,'i').replace(/ü/g,'u').replace(/ö/g,'o').replace(/ç/g,'c').replace(/ş/g,'s').replace(/ğ/g,'g').replace(/[^a-z0-9]/g,'');
-          const g = norm(data.goto); const btns = [...document.querySelectorAll('.cat-btn, .category-nav button, .category-nav a')];
-          let b = btns.find(x => norm(x.textContent) === g) || btns.find(x => norm(x.textContent).includes(g) || g.includes(norm(x.textContent)));
-          close(); if (b) b.click();
+          const g = norm(data.goto); const btns = [...document.querySelectorAll('.cat-btn')];
+          let idx = btns.findIndex(x => norm(x.textContent) === g);
+          if (idx < 0) idx = btns.findIndex(x => norm(x.textContent).includes(g) || g.includes(norm(x.textContent)));
+          close();
+          // Panel kapandiktan sonra (body kilidi cozulunce) HEDEF BOLUME kaydir.
+          // NOT: cat-btn.click() programatik cagride kaydirmiyor (app.js davranisi) -> ilgili
+          //      #cat-{index} bolumune DOGRUDAN scrollIntoView (guvenilir) + aktif rozet icin click.
+          setTimeout(function () {
+            try {
+              const b = btns[idx];
+              if (b) b.click(); // aktif kategori rozeti + tembel render tetigi
+              const sec = idx >= 0 ? document.getElementById('cat-' + idx) : null;
+              if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              else if (b) b.scrollIntoView({ behavior: 'smooth' });
+            } catch (e) {}
+          }, 80);
         });
       }
       // AI bir urunu gostermek isterse: DOKUNULABILIR buton -> kullanici dokununca kartini (foto+detay) ac
       if (data && data.show) {
         addActionBtn(data.show + ' kartını aç', function () {
-          close(); if (typeof window.raiShowProduct === 'function') { try { window.raiShowProduct(data.show); } catch (e) {} }
+          close();
+          setTimeout(function () { if (typeof window.raiShowProduct === 'function') { try { window.raiShowProduct(data.show); } catch (e) {} } }, 80);
         });
       }
     } catch (e) { typing.remove(); addMsg('assistant', 'Bağlantı sorunu yaşadım, birazdan tekrar deneyin.'); }
