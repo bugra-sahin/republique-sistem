@@ -211,7 +211,21 @@ document.addEventListener('DOMContentLoaded', () => {
       const catSection = document.createElement('div');
       catSection.id = catId;
       catSection.className = 'category-section';
-      catSection.style.minHeight = '60px'; // bos kategori tetiklenebilsin
+      // TEMBEL RENDER + KAYDIRMA FIX: bos kategoriye GERCEKCI rezerve yukseklik ver (urun sayisindan tahmin).
+      // Boylece sayfa acilista TAM yukseklikte olur -> "menu bitti" yanilsamasi + dolan kategori buyuyunce
+      // alttakilerin itilmesi (kaydiran misafirin cat-2..cat-5'i hic gormemesi) ortadan kalkar.
+      // Kart cizilmedigi icin bellek korunur (acilista yalniz ~117 kart). fillCategory doldurunca minHeight silinir.
+      let _est = 12;
+      (category.sections || []).forEach(s => {
+        if (s.isVisible === false) return;
+        _est += 46; // bolum basligi
+        (s.products || []).forEach(p => {
+          if (p.inStock === false) return;
+          const _n = (p.variations && p.variations.length) ? p.variations.filter(v => v.inStock !== false).length : 1;
+          _est += Math.max(1, _n) * 112; // urun karti ~108px + bosluk
+        });
+      });
+      catSection.style.minHeight = Math.max(60, _est) + 'px';
       categoryElements.push({ id: catId, btn: btn });
       menuContainer.appendChild(catSection);
       pending.push({ catSection: catSection, category: category });
@@ -226,7 +240,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (rec) { fillCategory(rec.catSection, rec.category); io.unobserve(e.target); }
           }
         });
-      }, { rootMargin: '800px 0px' });
+      }, { rootMargin: '1500px 0px' });
       pending.forEach(p => io.observe(p.catSection));
     } else {
       pending.forEach(p => fillCategory(p.catSection, p.category));

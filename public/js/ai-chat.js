@@ -9,19 +9,10 @@
   }
   const table = getTable();
   if (!table) {
-    // Masasiz ziyaretci: ust "Republique AI" butonu tiklaninca nazik davet mesaji
-    function showVisitToast() {
-      let t = document.getElementById('raiVisitToast');
-      if (!t) {
-        t = document.createElement('div'); t.id = 'raiVisitToast';
-        t.style.cssText = "position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:10001;background:#0a1f16;color:#f3d573;border:1px solid rgba(212,175,55,.5);padding:14px 18px;border-radius:14px;max-width:88vw;font-family:'Outfit',system-ui,sans-serif;font-size:14px;line-height:1.4;box-shadow:0 10px 30px rgba(0,0,0,.5);text-align:center";
-        t.textContent = "Republique AI'ı denemek için bizi ziyaret edebilirsiniz — masanızdaki QR'ı okuttuğunuzda size özel öneriler sunarım.";
-        document.body.appendChild(t);
-      }
-      t.style.display = 'block'; clearTimeout(t._to); t._to = setTimeout(function () { t.style.display = 'none'; }, 5000);
-    }
-    function wireNoTable() { const b = document.querySelector('.ai-btn'); if (b) b.addEventListener('click', function (e) { e.preventDefault(); showVisitToast(); }); }
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wireNoTable); else wireNoTable();
+    // Masasiz ziyaretci: KOTA KORUMASI -> "Republique AI" butonu HIC gorunmesin (spec #35 / OPUS-GOREV IS2).
+    // (Onceki surumde buton gorunup tiklaninca davet mesaji cikiyordu; UX tutarsizdi. Artik buton tamamen gizli.)
+    function hideAiBtn() { const b = document.querySelector('.ai-btn'); if (b) b.style.display = 'none'; }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', hideAiBtn); else hideAiBtn();
     return;
   }
 
@@ -152,6 +143,9 @@
   }
   fab.addEventListener('click', function (e) { e.preventDefault(); open(); });
   panel.querySelector('.rai-close').addEventListener('click', close);
+  // MOBIL CAKISMA FIX (OPUS-GOREV IS3): genis karsilama balonu ~6sn sonra otomatik YUVARLAGA donsun ki
+  // 390px'de sol-alt "Uye Ol/Giris" butonu ile sag-alt balon ust uste binmesin. (Panel acilmadiysa.)
+  setTimeout(function () { if (!panel.classList.contains('open')) fab.classList.add('round'); }, 6000);
 
   async function callApi(text) {
     return fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -204,8 +198,10 @@
               const b = btns[idx];
               if (b) b.click(); // aktif kategori rozeti + tembel render tetigi
               const sec = idx >= 0 ? document.getElementById('cat-' + idx) : null;
-              if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              else if (b) b.scrollIntoView({ behavior: 'smooth' });
+              // NOT: behavior:'smooth' tembel-render (content-visibility) ile bu sayfada
+              //      calismiyor (0'da kaliyor) -> 'instant' guvenilir sekilde hedefe atlar.
+              if (sec) sec.scrollIntoView({ behavior: 'instant', block: 'start' });
+              else if (b) b.scrollIntoView({ behavior: 'instant', block: 'start' });
             } catch (e) {}
           }, 80);
         });
