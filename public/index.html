@@ -24,19 +24,28 @@
   <link rel="apple-touch-icon" href="/icons/apple-touch-180.png">
   <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
   
-  <!-- Meta Pixel Code -->
+  <!-- Meta Pixel Code — SADECE canli domainde yuklenir. test1/test2'de gercek event GITMEZ (veri kirliligi
+       onlemi, OPUS-GOREV IS4). Canli domaine gecince otomatik acilir; fbq test ortaminda no-op stub olur ki
+       uygulama icindeki fbq('track','ViewMenu'...) cagrilari hata vermeden sessizce gecsin. -->
   <script>
-  !function(f,b,e,v,n,t,s)
-  {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-  n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-  if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-  n.queue=[];t=b.createElement(e);t.async=!0;
-  t.src=v;s=b.getElementsByTagName(e)[0];
-  s.parentNode.insertBefore(t,s)}(window, document,'script',
-  'https://connect.facebook.net/en_US/fbevents.js');
-  fbq('init', '858472356496034');
-  // Burada PageView atmıyoruz, çünkü uygulama içerisinde dinamik olarak ViewMenu olayı atacağız.
-  // fbq('track', 'PageView');
+  (function () {
+    var CANLI = ['republique.tr','www.republique.tr','menu.republique.tr'];
+    if (CANLI.indexOf(location.hostname) !== -1) {
+      !function(f,b,e,v,n,t,s)
+      {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+      n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+      if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+      n.queue=[];t=b.createElement(e);t.async=!0;
+      t.src=v;s=b.getElementsByTagName(e)[0];
+      s.parentNode.insertBefore(t,s)}(window, document,'script',
+      'https://connect.facebook.net/en_US/fbevents.js');
+      fbq('init', '858472356496034');
+      // Burada PageView atmıyoruz, çünkü uygulama içerisinde dinamik olarak ViewMenu olayı atacağız.
+    } else {
+      // test1/test2 (veya bilinmeyen host): fbq no-op -> gercek event Meta'ya gitmez, kod hata vermez.
+      window.fbq = window.fbq || function () {};
+    }
+  })();
   </script>
   <!-- End Meta Pixel Code -->
   <!-- Mobil bellek/performans: ekran disindaki urun kartlarini render etme (413 kart -> Safari bellek baskisi/yenileme cozumu) -->
