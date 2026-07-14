@@ -27,7 +27,11 @@ body {
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
   position: relative;
-  overflow-x: hidden;
+  /* KRITIK: 'overflow-x: hidden' overflow-y'yi de otomatik 'auto' yapip body'yi KAYDIRMA-KABINA
+     ceviriyordu -> window 'scroll' olaylari + IntersectionObserver calismiyor -> tembel-render
+     tetiklenmiyor (kaydiran misafir cat-2..cat-5'i goremiyor). 'clip' yatay tasmayi keser AMA
+     kaydirma-kabi OLUSTURMAZ (overflow-y visible kalir) -> scroll + observer normal calisir. */
+  overflow-x: clip;
 }
 
 /* Sıcak Pub Işıklandırma Efektleri (Kehribar/Bakır/Zümrüt) */
