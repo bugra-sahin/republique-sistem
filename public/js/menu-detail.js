@@ -68,18 +68,33 @@
       //   Kendi kendini duzeltir; motor farkini tahmin etmeye gerek kalmaz. En fazla 3 deneme.
       //   (scrollIntoView'in ayni sayfada WebKit'te CALISTIGI kanitli: denetimin kategori testi
       //    bunu kullaniyor ve Safari'de [ok] veriyor. behavior verilmez -> ANINDA, smooth DEGIL.)
-      requestAnimationFrame(function(){requestAnimationFrame(function(){
+      // ============================================================================
+      // FIX (2026-07-15, §80-C): **KOK NEDEN BULUNDU - SORUN KAYDIRMA DEGIL, rAF.**
+      //
+      // OLCUM (tests/webkit-teshis.js, sarmalayicisiz sayac turu):
+      //   iPhone-12-SAFARI : rAF 1 KEZ tetiklendi -> scrollIntoView 0 KEZ -> scrollY 0  (HATA)
+      //   iPhone-SE-SAFARI : rAF 5 KEZ tetiklendi -> scrollIntoView 3 KEZ -> scrollY 62242 (GECER)
+      //
+      // ESKI KOD IC ICE 2 rAF ile basliyordu. iPhone-12 WebKit'te IKINCI rAF geri cagrisi
+      // HIC KOSMADI -> git() hic cagrilmadi -> sayfa HIC kaymadi. Yani kaydirma mantigi
+      // bozuk DEGILDI; O KOD HIC CALISMIYORDU. (Bu yuzden §80/§80-B duzeltmeleri -sira ve
+      // reflow- hicbir sey degistirmedi: duzelttikleri satirlara HIC ULASILMIYORDU.)
+      //
+      // Bu, PROJE-DEVIR §67-H ve §69-F-6'da ZATEN yazan tuzagin ta kendisi:
+      // 'rAF arka planda/kisilmis baglamda CALISMAZ'. Uzun sayfa + WebKit'te de oluyor.
+      //
+      // COZUM: KRITIK bir isi rAF'a EMANET ETME.
+      //   1) Baslatma: rAF VE setTimeout birlikte kurulur, ILK GELEN kazanir (basladi bayragi
+      //      ile tek sefer kosar). rAF calisirsa layout oturmus olur (ideal); calismazsa
+      //      120ms sonra setTimeout kurtarir.
+      //   2) Dogrulama dongusu de rAF yerine setTimeout kullanir (rAF olmeyse dongu de olur).
+      // ============================================================================
+      var basladi=false;
+      var basla=function(){
+        if(basladi) return; basladi=true;
         try{
           var deneme=0;
-          // FIX (2026-07-15, §80-B): WEBKIT STALE LAYOUT.
-          //   KANIT: teshis scriptinde her cagrinin ONCESINDE/SONRASINDA getBoundingClientRect
-          //   okundugu icin test GECIYORDU; okumalar KALKINCA denetimde HATA veriyordu.
-          //   Yani olcumun kendisi hatayi GIZLEMIYOR, DUZELTIYORDU. Sebep: getBoundingClientRect
-          //   okumak tarayiciyi SENKRON reflow'a zorlar. raiFillForProduct/openCard/raiPinCategory ve
-          //   __raiEnsureWindow DOM'u degistirir -> layout KIRLI kalir. WebKit kirli layout'ta
-          //   scrollIntoView'i ESKI (bayat) geometriyle hesaplayip yanlis yere kaydirir.
-          //   Chromium layout'u kendisi flush ettigi icin orada hic gorulmedi.
-          // COZUM: her kaydirmadan ONCE layout'u ZORLA hesaplat.
+          // Layout'u ZORLA hesaplat: DOM az once degisti (fill/pin/ensureWindow) -> layout kirli.
           var zorla=function(){ try{ return card.getBoundingClientRect().top; }catch(e){ return 0; } };
           var git=function(){
             zorla();
@@ -87,14 +102,9 @@
               var r=card.getBoundingClientRect();
               window.scrollTo(0,Math.max(0,r.top+window.pageYOffset-Math.max(0,(window.innerHeight-r.height)/2)));
             }
+            // Pencereli render'i tazele; sonra TEKRAR kaydir (bkz. §80: ensureWindow sayfayi
+            // buyutup karti ekran disina atabiliyor -> git()'in SON isi daima kaydirma olsun).
             if(typeof window.__raiEnsureWindow==='function'){try{window.__raiEnsureWindow();}catch(e){}}
-            // FIX (2026-07-15, §80): OLCULDU (tests/webkit-teshis.js) -> ESKI SIRA TERSTI.
-            //   scrollIntoView karti ekrana getiriyordu (kartTop 262), HEMEN ARDINDAN cagrilan
-            //   __raiEnsureWindow pencereli render'i tazeleyip sayfayi 56404 -> 58620 BUYUTUYOR
-            //   ve karti 262 -> 2478'e FIRLATIYORDU (= ekran disi). Yani 'once kaydir, SONRA
-            //   layout'u degistir' yanlis siraydi; kart kaydirildigi yerde KALMIYORDU.
-            // COZUM: pencere tazelendikten SONRA TEKRAR kaydir -> git()'in SON isi DAIMA kaydirma,
-            //   layout degisimi DEGIL. Boylece kaydirmadan sonra layout artik oynamaz.
             zorla();
             try{ card.scrollIntoView({block:'center', inline:'nearest'}); }catch(e){}
           };
@@ -103,12 +113,15 @@
             var ekranda = r.top > -50 && r.top < window.innerHeight;
             if(ekranda || deneme>=5) return;   // oldu ya da pes et (sonsuz dongu YOK)
             deneme++; git();
-            requestAnimationFrame(dogrula);
+            setTimeout(dogrula, 50);           // rAF DEGIL: rAF olu olabilir (kok neden buydu)
           };
           git();
-          requestAnimationFrame(dogrula);
+          setTimeout(dogrula, 50);
         }catch(e){}
-      });});
+      };
+      // ILK GELEN KAZANIR: rAF calisiyorsa hemen, calismiyorsa 120ms'de setTimeout kurtarir.
+      try{ requestAnimationFrame(function(){ requestAnimationFrame(basla); }); }catch(e){}
+      setTimeout(basla, 120);
       return true;
     }catch(e){}
     return false;
