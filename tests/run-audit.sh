@@ -11,6 +11,16 @@
 # CHAT=1 verilirse AI sohbet testi de kosar (GERCEK Anthropic cagrisi, 1 mesaj).
 set -u
 URL_HEDEF="${URL:-https://test2.republique.tr}"
+# KISAYOL (2026-07-15, §80-I): Hetzner web konsolunda **iki nokta yazilamaz** -> ":" tusu ENTER
+#   gibi davranip komutu IKIYE BOLUYOR. KANIT: `echo a:b` -> "a" + "b: command not found".
+#   Yani `URL=https://test1...` konsola ELLE YAZILAMAZ. Bu yuzden hedefi ARGUMAN ile seciyoruz:
+#       bash tests/run-audit.sh test1     -> CANLI (test1) denetlenir   [iki nokta YOK]
+#       bash tests/run-audit.sh           -> test2 (varsayilan)
+#   (Terfi sonrasi test1'de olcum ZORUNLU oldugu icin bu kisayol kalicidir.)
+case "${1:-}" in
+  test1) URL_HEDEF="https://test1.republique.tr" ;;
+  test2) URL_HEDEF="https://test2.republique.tr" ;;
+esac
 MASA_HEDEF="${MASA:-b-9}"
 CHAT_ACIK="${CHAT:-0}"
 IMAJ="mcr.microsoft.com/playwright:v1.47.0-jammy"
