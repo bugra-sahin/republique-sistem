@@ -186,14 +186,78 @@ const VALID_TABLES = new Set();
   for (var i=r[0]; i<=r[1]; i++) VALID_TABLES.add(r[2]+'-'+i);
 });
 
+// ============ MENU SCHEMA — AI ASISTANLARI ICIN MAKINE-OKUR MENU (§76 GEO) ============
+// NEDEN: Bugra'nin hedefi "Ankara'da kokteyl/bira/viski/yemek soran herkesin konusmasinda gecelim".
+// GEO arastirmasi (2026): AI asistanlari OZGUN VERI + yapisal veri + fiyat/olgu iceren kaynaklari
+// belirgin sekilde daha cok ALINTILIYOR. Bizde 432 urunluk fiyatli menu VAR ama makine-okur
+// degildi: schema'da yalnizca "hasMenu": <link> vardi (ustelik eski Wix adresine).
+// ARTIK: schema.org/Menu -> MenuSection -> MenuItem (ad + aciklama + FIYAT/TRY) sunulur.
+// Kaynak: data/menu.json (menu cekicinin yazdigi onbellek). Dosya yoksa SESSIZCE atlanir.
+// Guvenlik/temizlik: personel & "Ekstra Istek" gibi servis kalemleri haric; stokta olmayan haric;
+// JSON icindeki "<" kacislanir (</script> ile HTML kirilmasin).
+let _menuLdCache = { v: null, t: 0 };
+function menuSchemaUret() {
+  try {
+    const fs = require("fs");
+    const p = path.join(__dirname, "data", "menu.json");
+    if (!fs.existsSync(p)) return "";
+    const ham = JSON.parse(fs.readFileSync(p, "utf8"));
+    let cats = (ham.result && ham.result.categories) || ham.categories || ham;
+    if (!Array.isArray(cats)) return "";
+    const SAHTE = /personel|ekstra\s*istek/i;
+    const bolumler = [];
+    for (const c of cats) {
+      if (!c || c.isVisible === false || SAHTE.test(c.name || "")) continue;
+      const kalemler = [];
+      for (const sec of (c.sections || [])) {
+        if (SAHTE.test(sec.name || "")) continue;
+        for (const u of (sec.products || [])) {
+          if (!u || u.inStock === false || SAHTE.test(u.name || "")) continue;
+          const k = { "@type": "MenuItem", "name": String(u.name || "").trim().slice(0, 120) };
+          if (!k.name) continue;
+          if (u.description) k.description = String(u.description).trim().slice(0, 300);
+          const fi = Number(u.price);
+          if (fi > 0) k.offers = { "@type": "Offer", "price": fi, "priceCurrency": "TRY" };
+          kalemler.push(k);
+        }
+      }
+      if (kalemler.length) bolumler.push({ "@type": "MenuSection", "name": String(c.name || "").trim(), "hasMenuItem": kalemler });
+    }
+    if (!bolumler.length) return "";
+    const ld = JSON.stringify({
+      "@context": "https://schema.org", "@type": "Menu",
+      "name": "Republique Tunalı — Menü", "inLanguage": "tr-TR",
+      "hasMenuSection": bolumler
+    }).replace(/</g, "\\u003c");
+    return '<script type="application/ld+json">' + ld + '</script>';
+  } catch (e) { console.error("menuSchemaUret:", e.message); return ""; }
+}
+function menuSchemaAl() {
+  const now = Date.now();
+  if (_menuLdCache.v !== null && now - _menuLdCache.t < 300000) return _menuLdCache.v;
+  _menuLdCache = { v: menuSchemaUret(), t: now };
+  return _menuLdCache.v;
+}
+// index.html'i menu schema'si ENJEKTE EDEREK gonderir. Hata olursa duz dosyaya duser (misafir etkilenmez).
+function menuSayfasiGonder(res) {
+  const dosya = path.join(__dirname, "public", "index.html");
+  try {
+    const fs = require("fs");
+    let html = fs.readFileSync(dosya, "utf8");
+    const ld = menuSchemaAl();
+    if (ld && html.includes("</head>")) html = html.replace("</head>", ld + "</head>");
+    return res.type("html").send(html);
+  } catch (e) { return res.sendFile(dosya); }
+}
+
 app.get("/menu", (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  menuSayfasiGonder(res);
 });
 
 app.get("/menu/:table", (req, res) => {
   const _t = String(req.params.table || "").toUpperCase().trim();
   if (!VALID_TABLES.has(_t)) return res.redirect("/menu");
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  menuSayfasiGonder(res);
 });
 
 // Blog (SEO/GEO icerik) — temiz URL'ler. Dosyalar public/blog/ altinda.
