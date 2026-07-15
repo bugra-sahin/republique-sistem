@@ -32,7 +32,7 @@ gercek iPhone turu yine de gerekir (ayda 1-2, her gun degil).
  (3) [tasma] position:fixed ogeler (glow-1/2/3 gibi dekoratif isiklar) artik SUCLANMIYOR -
      belge akisinin disindalar, sayfa tasmasi yaratmazlar = yanlis pozitifti. (E-4)
 */
-const { chromium, devices } = require('playwright');
+const { chromium, webkit, devices } = require('playwright');
 const fs = require('fs'); const path = require('path');
 
 const BASE = (process.env.URL || 'https://test2.republique.tr').replace(/\/$/, '');
@@ -289,14 +289,31 @@ async function denetle(browser, hedef) {
 }
 
 (async () => {
-  const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
+  // SURUM 4 (§78): SAFARI/WebKit EKLENDI. Bugra hakli olarak sordu: "Safari'de cokme yapmiyor mu?"
+  // NEDEN KRITIK: iPhone'da HER TARAYICI WebKit'tir (iOS'taki Chrome bile). Gecmisteki iPhone
+  // cokmesi ZATEN bir WebKit hatasiydi (fill + smooth scroll). Chromium emulasyonu Safari DEGIL.
+  // Ayni cihaz iki motorda da kosulur -> motor farkindan gelen hata aninda gorunur.
+  const motorlar = { chromium: null, webkit: null };
+  async function motorAl(ad) {
+    if (!motorlar[ad]) {
+      motorlar[ad] = ad === 'webkit'
+        ? await webkit.launch({ headless: true })
+        : await chromium.launch({ headless: true, args: ['--no-sandbox'] });
+    }
+    return motorlar[ad];
+  }
   const hedefler = [
-    { name: 'iPhone-12', dev: devices['iPhone 12'] },
-    { name: 'iPhone-SE', dev: devices['iPhone SE'] },
-    { name: 'Pixel-5', dev: devices['Pixel 5'] },
+    { name: 'iPhone-12', dev: devices['iPhone 12'], motor: 'chromium' },
+    { name: 'iPhone-SE', dev: devices['iPhone SE'], motor: 'chromium' },
+    { name: 'Pixel-5', dev: devices['Pixel 5'], motor: 'chromium' },
+    { name: 'iPhone-12-SAFARI', dev: devices['iPhone 12'], motor: 'webkit' },
+    { name: 'iPhone-SE-SAFARI', dev: devices['iPhone SE'], motor: 'webkit' },
   ];
-  for (const h of hedefler) { try { await denetle(browser, h); } catch (e) { BAD(h.name, 'olumcul', e.message); } }
-  await browser.close();
+  for (const h of hedefler) {
+    try { const b = await motorAl(h.motor); await denetle(b, h); }
+    catch (e) { BAD(h.name, 'olumcul', e.message); }
+  }
+  for (const k of Object.keys(motorlar)) { if (motorlar[k]) { try { await motorlar[k].close(); } catch (e) {} } }
   const rapor = { adres: MENU, zaman: new Date().toISOString(), gecen: gecen.length, sorunSayisi: sorunlar.length, sorunlar };
   try { fs.mkdirSync(OUT, { recursive: true }); fs.writeFileSync(path.join(OUT, 'ux-audit.json'), JSON.stringify(rapor, null, 2)); } catch (e) {}
   console.log('\n================ DENETIM SONUCU ================');
