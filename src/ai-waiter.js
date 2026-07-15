@@ -212,7 +212,7 @@ YONLENDIRME KURALLARI (onayli) — SIRA COK ONEMLI:
 - BOLUM ACMA ETIKETI [[AC:Kategori]]: Yanitin EN SONUNA koy (cumle icinde ACIKLAMA). Gecerli kategoriler: Cok Satanlar, Yiyecek, Kokteyl, Alkollu Icecek, Viski, Icecek.
   * Etiketi SU IKI durumda koy: (a) misafir DOGRUDAN bir bolumu gormek/listelemek isterse ("biralara bakayim", "kokteyller neler", "menuyu goster", "tatlilar") -> istedigi bolumu HEMEN ac, oneri sarti YOK; (b) yukaridaki siradan-urun yonlendirmesinde misafir oneriyi reddettikten SONRA.
   * FARK: "bira/patates ISTIYORUM" = siparis niyeti -> once oner, bolumu ACMA. "biralara BAKAYIM / neler var" = gorme niyeti -> hemen ac. Bu ikisini karistirma.
-- URUN GOSTERME ETIKETI [[SHOW:UrunAdi]]: Misafir TEK BIR urunu GORMEK isterse ("X'i goster", "nasil gorunuyor", "fotografini gorebilir miyim", "X neydi") ya da sen bir urunu one cikarip gostermek istersen, yanitinin EN SONUNA [[SHOW:UrunAdi]] koy — o urunun karti (buyuk foto + detay) ekranda acilir. UrunAdi'ni menudeki TAM adiyla yaz. Yanitta bir kokteyl/urun onerirken bunu eklemek misafirin isini kolaylastirir. Ayni yanitta hem [[AC:...]] hem [[SHOW:...]] koyma; birini sec.
+- URUN GOSTERME ETIKETI [[SHOW:UrunAdi]]: Misafir TEK BIR urunu GORMEK isterse ("X'i goster", "nasil gorunuyor", "fotografini gorebilir miyim", "X neydi") ya da sen bir urunu one cikarip gostermek istersen, yanitinin EN SONUNA [[SHOW:UrunAdi]] koy — o urunun karti (buyuk foto + detay) ekranda acilir. UrunAdi'ni menudeki TAM adiyla yaz. Yanitta bir kokteyl/urun onerirken bunu eklemek misafirin isini kolaylastirir. Ayni yanitta hem [[AC:...]] hem [[SHOW:...]] koyma; birini sec. KESIN KURAL (celiski gidermek icin): Yanitinda BELIRLI BIR URUN adini oneri olarak aniyorsan ve misafir bunu onaylarsa/gormek isterse ("bakayim", "olur", "evet", "goster") DAIMA [[SHOW:UrunAdi]] koy, [[AC:Kategori]] KOYMA. [[AC:]] YALNIZCA hicbir belirli urun anmadigin ve misafirin bir listeyi/bolumu gezmek istedigi durumdadir ("biralara bakayim", "kokteyller neler"). Misafirin onayi SON konustugunuz URUNE aittir; onu bolum acma gerekcesi sayma.
 - BAGLAM TAKIBI (onemli): Konusma hangi kategoride ise ORADA kal. Misafir "baska ne var", "bir tane daha", "benzeri", "peki ya" gibi derse SON konustugunuz tur/kategoriye SADIK kal (kokteyl konusuluyorsa baska KOKTEYL oner, biraya/baska kategoriye ATLAMA). Misafir acikca degistirmedikce konuyu kaydirma.
 - NAZIK ONERI (upsell/cross-sell): Iyi bir ev sahibi gibi, misafirin keyfini artiracak TAMAMLAYICI bir oneri ekle — ama baskici/satisci OLMA. Ornek: yemek beklenirken hafif bir baslangic/cerez; sectigi kokteylden sonra deneyebilecegi ikinci bir icecek; yemegin yanina uygun bir icecek; sonrasinda tatli. Dogal, icten ve TEK bir nazik oneri; israr etme, uydurma urun onerme (yalnizca menuden).
 
@@ -273,7 +273,7 @@ async function chatWithWaiter({ message, repId, ip, history, table }) {
   // Sohbet gecmisi (son 4 mesaj — maliyet icin kisa tutuldu)
   const msgs = [];
   if (Array.isArray(history)) {
-    for (const h of history.slice(-4)) {
+    for (const h of history.slice(-8)) {
       if (h && (h.role === 'user' || h.role === 'assistant') && typeof h.content === 'string') {
         msgs.push({ role: h.role, content: h.content.slice(0, MAX_INPUT_CHARS) });
       }
@@ -295,6 +295,12 @@ async function chatWithWaiter({ message, repId, ip, history, table }) {
     if (sm) { show = sm[1].trim(); }
     const fm = text.match(/\[\[GORUS:([^\]]+)\]\]/i);
     if (fm) { gorus = fm[1].trim().slice(0, 1000); }
+    // GUARDRAIL (2026-07-15): Model bir URUN onerirken bazen yanlislikla BOLUM acma etiketi
+    // koyuyor ya da ikisini birden koyuyor. (Bugra 15.07: "Creeper onerdi, bakim dedim ->
+    // Kokteyl bolumunu acti, Creeper kartini acmadi.") Prompt bunu zaten yasakliyor AMA model
+    // TUTARSIZ: ayni girdiyle 3 farkli sonuc olculdu (SHOW / AC / etiket yok). Modelin iyi
+    // davranmasina guvenme -> KODDA ZORLA: urun karti her zaman kazanir, bolum etiketi atilir.
+    if (show && goto) goto = null;
     text = text.replace(/\[\[AC:[^\]]+\]\]/ig, '').replace(/\[\[SHOW:[^\]]+\]\]/ig, '').replace(/\[\[GORUS:[^\]]+\]\]/ig, '').trim();
     text = sanitizeReply(text);
     if (text.length > 1500) text = text.slice(0, 1500);

@@ -257,10 +257,16 @@ app.post("/api/chat", async (req, res) => {
     }
     res.json(result);
     // Sohbeti kaydet (yalnizca gercek yanitlari)
-    if (result && result.ok && !result.queued && !result.notable && result.reply && message) {
+    if (result && result.ok && !result.queued && !result.notable && message) {
+      // FIX (2026-07-15): eskiden burada "result.reply &&" sarti vardi -> model SADECE etiket
+      // dondurup metin yazmadiginda (reply="") sohbet kaydi HIC dusmuyordu. Yani AI'in yanlis
+      // buton koydugu anlar gorunmez oluyordu (Bugra'nin "Bakim" mesaji kayitlarda yoktu).
+      // Artik bos yanit da kaydedilir + URETILEN ETIKET/BUTON da yazilir (teshis icin sart).
+      const _etiket = result.show ? "[SHOW:" + result.show + "]" : (result.goto ? "[AC:" + result.goto + "]" : "");
+      const _kayit = ((result.reply || "") + (_etiket ? " " + _etiket : "")).trim() || "(bos yanit, etiket yok)";
       db.query(
         "INSERT INTO chat_logs (rep_id, table_name, user_msg, ai_reply, provider) VALUES ($1,$2,$3,$4,$5)",
-        [repId || null, table || null, String(message).slice(0,2000), String(result.reply).slice(0,4000),
+        [repId || null, table || null, String(message).slice(0,2000), String(_kayit).slice(0,4000),
          process.env.GEMINI_API_KEY ? "gemini" : "anthropic"]
       ).catch(e => console.error("chat_logs insert:", e.message));
     }
