@@ -72,7 +72,7 @@
     <div class="rai-body" id="raiBody"></div>
     <div class="rai-foot">
       <input class="rai-inp" id="raiInp" placeholder="Menüyle ilgili sorun..." maxlength="500" autocomplete="off">
-      <button class="rai-send" id="raiSend">Gönder</button>
+      <button class="rai-send" id="raiSend" type="button">Gönder</button>
     </div>`;
   document.body.appendChild(panel);
 
@@ -202,6 +202,9 @@
               //      calismiyor (0'da kaliyor) -> 'instant' guvenilir sekilde hedefe atlar.
               if (sec) sec.scrollIntoView({ behavior: 'instant', block: 'start' });
               else if (b) b.scrollIntoView({ behavior: 'instant', block: 'start' });
+              // Uzak bir noktaya atladik: pencereli render'a 'yeni konuma gore doldur/bosalt' de.
+              // (scroll olayi programatik atlamada gec/hic gelmeyebilir -> hedef bolum bos gorunurdu.)
+              if (typeof window.__raiEnsureWindow === 'function') window.__raiEnsureWindow();
             } catch (e) {}
           }, 80);
         });
