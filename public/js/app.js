@@ -231,7 +231,7 @@ document.addEventListener('DOMContentLoaded', () => {
       pending.push({ catSection: catSection, category: category });
     });
 
-    // TEMBEL RENDER: kategori ekrana ~800px yaklasinca urunlerini olustur.
+    // TEMBEL RENDER: kategori ekrana ~1500px yaklasinca urunlerini olustur.
     let io = null;
     if ('IntersectionObserver' in window) {
       io = new IntersectionObserver((entries) => {
@@ -251,19 +251,27 @@ document.addEventListener('DOMContentLoaded', () => {
     if (pending[1]) fillCategory(pending[1].catSection, pending[1].category);
 
     // ================= PENCERELI RENDER (IS1 + MOBIL COKME BIRLIKTE COZULUR) =================
-    // (a) Hepsini birden cizmek -> 415 kart / ~68.000px sayfa; her kartta backdrop-filter (cam efekti)
-    //     var -> GPU'da cok pahali. AI'in 'bolume git'/'kartini ac' butonuna dokununca uzak noktaya
-    //     (orn. y=62.000) atlayinca Safari o bolgeyi bir anda kompozit etmeye calisiyor -> WebKit
-    //     surec cokmesi -> sekme yeniden yuklenmesi ('sayfa yenilendi'/'atti'). IS1 doldurucusunun yan etkisi.
-    // (b) Hic doldurmamak -> observer tetiklenmezse kategoriler bos kalir (IS1 sikayeti).
-    // COZUM: EKRANA YAKIN kategoriler DOLU, UZAKTAKILER BOSALTILIR -> DOM hep kucuk (bellek/GPU guvenli)
-    // AMA misafir nereye atlarsa atlasin dolu icerik gorur (observer'a bagimli degil).
-    // Bosaltirken OLCULEN GERCEK yukseklik minHeight'a sabitlenir -> sayfa asla ziplamaz.
-    const YAKIN = 2500;
-    const UZAK  = 8000;   // YAKIN<UZAK = histerezis (dolup-bosalma gidip gelmesi yok)
+    // GECMIS (iki uc nokta da hataliydi):
+    //  (a) Hepsini birden cizmek -> 415 kart / ~68.000px sayfa. Her kartta backdrop-filter (cam efekti)
+    //      var; bu GPU'da cok pahali. AI'in "bolume git"/"kartini ac" butonuna dokununca uzak bir
+    //      noktaya (orn. y=62.000) atlayinca Safari o bolgeyi bir anda kompozit etmek zorunda kaliyor
+    //      -> WebKit surecinin cokup sekmeyi yeniden yuklemesi ("sayfa yenilendi" / "atti").
+    //      NOT: Bu, IS1 icin ekledigim "garanti doldurucu"nun yan etkisiydi (kendi notum satir 140'ta
+    //      zaten bu riski yaziyordu; doldurucu onu geri getirdi).
+    //  (b) Hic doldurmamak -> observer tetiklenmezse kategoriler bos kaliyordu (IS1 sikayeti).
+    // COZUM: EKRANA YAKIN kategoriler DOLU, UZAKTAKILER BOSALTILIR. DOM her zaman kucuk kalir
+    // (bellek/GPU guvenli) AMA misafir nereye atlarsa atlasin dolu icerik gorur (observer'a bagimli degil).
+    // Bosaltirken OLCULEN GERCEK yukseklik minHeight olarak sabitlenir -> sayfa asla ziplamaz.
+    const YAKIN = 2500;   // bu mesafedekiler dolu olsun
+    const UZAK  = 8000;   // bundan uzaktakiler bosaltilsin (YAKIN<UZAK = histerezis -> dolup-bosalma gidip gelmesi yok)
+    // FIX (2026-07-14, Fable): AI "kartini ac" hedefinin kategorisi, kullanici oraya atlarken
+    // unfill tarafindan BOSALTILMASIN (kart DOM'dan silinip "karta goturmedi" oluyordu).
+    let _pinliSection = null, _pinliZaman = 0;
+    window.raiPinCategory = function (sec) { _pinliSection = sec || null; _pinliZaman = Date.now(); };
     function unfillCategory(catSection) {
+      if (_pinliSection === catSection && (Date.now() - _pinliZaman) < 15000) return;
       if (!catSection.dataset.filled) return;
-      const h = catSection.offsetHeight;
+      const h = catSection.offsetHeight;              // GERCEK yukseklik -> geometri korunur, zipreme yok
       catSection.style.minHeight = h + 'px';
       while (catSection.firstChild) catSection.removeChild(catSection.firstChild);
       delete catSection.dataset.filled;
@@ -284,6 +292,7 @@ document.addEventListener('DOMContentLoaded', () => {
       requestAnimationFrame(function () { _tick = false; ensureWindow(); });
     }, { passive: true });
     setTimeout(ensureWindow, 300);
+    // AI "bolume git" gibi programatik atlamalar sonrasi da pencere tazelensin (scroll olayi gec kalabilir)
     window.__raiEnsureWindow = ensureWindow;
 
     // AI [[SHOW:Urun]] icin: SADECE o urunun kategorisini doldur (413 kartin HEPSINI birden cizmek
