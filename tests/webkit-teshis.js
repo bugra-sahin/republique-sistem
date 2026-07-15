@@ -64,6 +64,16 @@ async function olc(browser, hedef) {
     window.scrollTo(0, 0);
     await bekle(400);
 
+    // SAYAC SARMALAYICILARI: SADECE SAYAR. rect/scrollY OKUMAZ -> senkron reflow ZORLAMAZ,
+    // dolayisiyla yarisi bozmaz (2. turun hatasi buydu).
+    let sivSayac = 0, stSayac = 0, rafSayac = 0;
+    const gerSIV = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function () { sivSayac++; return gerSIV.apply(this, arguments); };
+    const gerST = window.scrollTo.bind(window);
+    window.scrollTo = function () { stSayac++; return gerST.apply(null, arguments); };
+    const gerRAF = window.requestAnimationFrame.bind(window);
+    window.requestAnimationFrame = function (cb) { return gerRAF(function (t) { rafSayac++; return cb(t); }); };
+
     const donen = window.raiShowProduct(URUN);
     // raiShowProduct SENKRON kismi bitti; tuttugu "card" ile AYNI dugum bu olmali.
     // DIKKAT: querySelectorAll layout FLUSH ETMEZ (getBoundingClientRect eder) -> yarisi bozmaz.
@@ -77,6 +87,9 @@ async function olc(browser, hedef) {
 
     return {
       donen: donen,
+      sivSayac: sivSayac,
+      stSayac: stSayac,
+      rafSayac: rafSayac,
       innerH: window.innerHeight,
       scrollY: Math.round(window.pageYOffset),
       // KANIT ALANLARI
@@ -94,6 +107,10 @@ async function olc(browser, hedef) {
   }, URUN);
 
   console.log("  raiShowProduct dondu     : " + s.donen);
+  console.log("  ---- KOD GERCEKTEN KOSTU MU? ----");
+  console.log("  scrollIntoView cagrildi  : " + s.sivSayac + " kez   <-- 0 ise git() HIC KOSMADI (rAF tetiklenmedi)");
+  console.log("  window.scrollTo cagrildi : " + s.stSayac + " kez");
+  console.log("  rAF geri cagrisi tetikl. : " + s.rafSayac + " kez   <-- 0/dusuk ise rAF KISILMIS");
   console.log("  ekran yuksekligi         : " + s.innerH + "   scrollY: " + s.scrollY);
   console.log("  DOM kart sayisi          : " + s.domKart);
   console.log("  ---- KOPUK DUGUM KANITI ----");
