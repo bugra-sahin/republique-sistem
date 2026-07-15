@@ -5,3 +5,16 @@ pandas
 openpyxl
 python-multipart
 PyMuPDF
+# lxml: Fatura portallarindan (Mikrogrup vb.) inen "Excel" dosyalari aslinda .xls uzantili
+# HTML TABLOSU olabiliyor. main.py bu durumda pandas.read_html'e dusuyor; read_html ise lxml
+# olmadan calismaz -> "Import lxml failed. Use pip or conda to install the lxml package."
+# hatasi veriyordu (Bugra'nin bilgisayarinda lxml zaten kurulu oldugu icin orada sorun yoktu).
+# SADECE okuma/ayristirma kutuphanesi; veritabanina veya girilmis verilere DOKUNMAZ.
+lxml
+# html5lib+beautifulsoup4: read_html icin yedek ayristirici. lxml bir dosyayi cozemezse
+# pandas bunlara duser -> tek bir portal formati yuzunden fatura yukleme durmaz.
+html5lib
+beautifulsoup4
+# xlrd: main.py eski .xls formatinda buna dusuyor; kurulu olmadigi icin o basamak da
+# bosa gidiyordu. Gercek eski Excel dosyalari da okunabilsin.
+xlrd
