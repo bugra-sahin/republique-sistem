@@ -39,10 +39,15 @@
     background:#05100c;border:1px solid rgba(212,175,55,.25);border-radius:18px;display:none;flex-direction:column;
     z-index:10000;box-shadow:0 20px 60px rgba(0,0,0,.6);overflow:hidden;font-family:'Outfit',system-ui,sans-serif}
   .rai-panel.open{display:flex}
-  .rai-head{padding:14px 16px;background:linear-gradient(135deg,#0a1f16,#05100c);color:#f3d573;
+  /* DOKUNMA HEDEFI (§69-E-1, 2026-07-15): .rai-close 14x24 idi -> parmakla kapatmak zordu.
+     "NET SIFIR" hilesi (§69-C ile ayni): head dikey padding 14 -> 4, close min 44x44 =>
+     serit yuksekligi 52.8px AYNEN korunur. margin-right:-15px ile "x" isareti PIKSEL PIKSEL
+     eski yerinde kalir (glyph merkezi sag kenardan 23.8px: once de simdi de). OLCULDU. */
+  .rai-head{padding:4px 16px;background:linear-gradient(135deg,#0a1f16,#05100c);color:#f3d573;
     display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(212,175,55,.18)}
   .rai-head b{font-weight:600;letter-spacing:.3px;display:flex;align-items:center;gap:8px;color:#d4af37;font-size:15px}
-  .rai-close{background:none;border:none;color:#d4af37;font-size:24px;cursor:pointer;line-height:1}
+  .rai-close{background:none;border:none;color:#d4af37;font-size:24px;cursor:pointer;line-height:1;
+    min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center;padding:0;margin-right:-15px}
   .rai-body{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;-webkit-overflow-scrolling:touch}
   .rai-msg{max-width:86%;padding:10px 13px;border-radius:14px;font-size:14px;line-height:1.5;white-space:pre-wrap;word-wrap:break-word}
   .rai-user{align-self:flex-end;background:#d4af37;color:#05100c;border-bottom-right-radius:4px;font-weight:500}
