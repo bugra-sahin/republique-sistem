@@ -1,11 +1,21 @@
 #!/usr/bin/env node
 /* Republique - WEBKIT ai-kart TESHIS. SADECE OLCER, HICBIR SEYI DUZELTMEZ.
    §79-D: "tahmin degil OLCUM".
-   SORU: Safari/iPhone-12 de raiShowProduct cagrilinca kart neden ekrana gelmiyor?
-   YONTEM: HATA VEREN (iPhone-12) ile GECEN (iPhone-SE) yan yana olculur.
-   scrollIntoView / scrollTo / __raiEnsureWindow SARILIR -> her birinin kaydirmaya ve
-   sayfa yuksekligine ne yaptigi kaydedilir. Boylece "kaydirma hic olmuyor mu, yoksa",
-   "olduktan sonra geri mi aliniyor" sorusu OLCUMLE cevaplanir.
+
+   1. TUR BULGUSU (kanit): raiShowProduct icindeki git() SIRASI TERS ->
+      scrollIntoView kartI ekrana getiriyor (kartTop 262), HEMEN ARDINDAN __raiEnsureWindow
+      cagriliyor, o da sayfa yuksekligini 56404 -> 58620 buyutup kartI 2478 e FIRLATIYOR.
+      Yani once kaydirip SONRA layout degistiriliyor. Dogrulama dongusu bunu 2. denemede
+      genelde kurtariyor -> TEMIZ sayfada test GECIYOR. Demek ki hata YARIS (race) ve
+      sayfanin O ANKI doldurma durumuna bagli.
+
+   2. TUR SORUSU: denetimde ai-kart testinden ONCE kategori taramasi (her bolum scrollIntoView)
+      ve modal testi kosuyor -> sayfa BAMBASKA bir doldurma durumunda. Hata orada cikiyor olmali.
+      Bu yuzden her cihaz IKI senaryoda olculur:
+        TEMIZ        = sayfa yeni acilmis (1. turdaki gibi)
+        DENETIM-GIBI = ux-audit.js adim 4 (kategori taramasi) + adim 5 (modal) BIREBIR taklit edilir
+      Ikisi arasindaki fark HATANIN TETIKLEYICISIDIR.
+
    CALISTIR: cd /opt/republique-staging   sonra   bash tests/run-teshis.sh
 */
 const { webkit, devices } = require("playwright");
@@ -16,17 +26,39 @@ const URUN = process.env.URUN || "Limonata";
 const MENU = BASE + "/menu/" + MASA;
 
 const HEDEFLER = [
-  { name: "iPhone-12-SAFARI  (HATA VEREN)", dev: devices["iPhone 12"] },
-  { name: "iPhone-SE-SAFARI  (GECEN/kontrol)", dev: devices["iPhone SE"] }
+  { name: "iPhone-12-SAFARI", dev: devices["iPhone 12"] },
+  { name: "iPhone-SE-SAFARI", dev: devices["iPhone SE"] }
 ];
+const SENARYOLAR = ["TEMIZ", "DENETIM-GIBI"];
 
-async function olc(browser, hedef) {
+async function olc(browser, hedef, senaryo) {
   console.log("");
-  console.log("===== " + hedef.name + " =====");
+  console.log("===== " + hedef.name + "   [" + senaryo + "] =====");
   const ctx = await browser.newContext(Object.assign({}, hedef.dev));
   const page = await ctx.newPage();
   await page.goto(MENU, { waitUntil: "networkidle", timeout: 45000 });
   await page.waitForTimeout(2500);
+
+  if (senaryo === "DENETIM-GIBI") {
+    // ux-audit.js adim 4 (kategori) BIREBIR: her bolumu goruse getir, 500ms bekle, sonra basa don
+    await page.evaluate(async () => {
+      const bekle = (ms) => new Promise(r => setTimeout(r, ms));
+      const adet = document.querySelectorAll(".category-section").length;
+      for (let i = 0; i < adet; i++) {
+        const s = document.querySelectorAll(".category-section")[i];
+        if (!s) continue;
+        s.scrollIntoView({ block: "center" });
+        await bekle(500);
+      }
+      window.scrollTo(0, 0);
+    });
+    await page.waitForTimeout(500);
+    // ux-audit.js adim 5 (modal) BIREBIR
+    await page.locator(".product-card").first().click({ timeout: 5000 }).catch(() => {});
+    await page.waitForTimeout(700);
+    await page.locator(".pd-close").first().click().catch(() => {});
+    await page.waitForTimeout(300);
+  }
 
   const s = await page.evaluate(async (URUN) => {
     const bekle = (ms) => new Promise(r => setTimeout(r, ms));
@@ -78,11 +110,8 @@ async function olc(browser, hedef) {
       return { etiket: etiket,
         scrollY: Math.round(window.pageYOffset),
         kartTop: r ? Math.round(r.top) : null,
-        kartH: r ? Math.round(r.height) : null,
         sayfaH: Math.round(document.documentElement.scrollHeight),
         dom: document.querySelectorAll(".product-card").length,
-        bodyPos: getComputedStyle(document.body).position,
-        raiLock: document.body.classList.contains("rai-lock"),
         ekranda: r ? (r.top > -50 && r.top < window.innerHeight) : null };
     };
 
@@ -93,28 +122,27 @@ async function olc(browser, hedef) {
     await new Promise(r => requestAnimationFrame(r)); zaman.push(anlik("2-rAF1"));
     await new Promise(r => requestAnimationFrame(r)); zaman.push(anlik("3-rAF2"));
     await new Promise(r => requestAnimationFrame(r)); zaman.push(anlik("4-rAF3"));
-    await bekle(50);  zaman.push(anlik("5-50ms"));
-    await bekle(250); zaman.push(anlik("6-300ms"));
-    await bekle(300); zaman.push(anlik("7-600ms"));
-    await bekle(600); zaman.push(anlik("8-1200ms"));
+    await new Promise(r => requestAnimationFrame(r)); zaman.push(anlik("5-rAF4"));
+    await bekle(50);  zaman.push(anlik("6-50ms"));
+    await bekle(250); zaman.push(anlik("7-300ms"));
+    await bekle(900); zaman.push(anlik("8-1200ms  <- DENETIM BURAYA BAKAR"));
 
     return { donen: donen, innerH: window.innerHeight, innerW: window.innerWidth,
-      dpr: window.devicePixelRatio, zaman: zaman, olay: olay };
+      zaman: zaman, olay: olay };
   }, URUN);
 
-  console.log("raiShowProduct dondu: " + s.donen + "   ekran " + s.innerW + "x" + s.innerH + "  dpr " + s.dpr);
+  const son = s.zaman[s.zaman.length - 1];
+  console.log("raiShowProduct dondu: " + s.donen + "   ekran " + s.innerW + "x" + s.innerH);
+  console.log(">>> DENETIM SONUCU OLURDU: " + (son.ekranda ? "GECER" : "*** HATA (kart ekranda degil) ***"));
   console.log("");
-  console.log("-- ZAMAN CIZGISI (kartTop 0..innerH arasi ise ekranda) --");
-  console.log("etiket".padEnd(16) + "scrollY".padStart(8) + "kartTop".padStart(9) + "kartH".padStart(7)
-    + "sayfaH".padStart(9) + "dom".padStart(5) + "bodyPos".padStart(9) + "lock".padStart(6) + "ekranda".padStart(9));
+  console.log("etiket".padEnd(30) + "scrollY".padStart(8) + "kartTop".padStart(9) + "sayfaH".padStart(9) + "dom".padStart(5) + "ekranda".padStart(9));
   for (const z of s.zaman) {
-    console.log(String(z.etiket).padEnd(16) + String(z.scrollY).padStart(8) + String(z.kartTop).padStart(9)
-      + String(z.kartH).padStart(7) + String(z.sayfaH).padStart(9) + String(z.dom).padStart(5)
-      + String(z.bodyPos).padStart(9) + String(z.raiLock).padStart(6) + String(z.ekranda).padStart(9));
+    console.log(String(z.etiket).padEnd(30) + String(z.scrollY).padStart(8) + String(z.kartTop).padStart(9)
+      + String(z.sayfaH).padStart(9) + String(z.dom).padStart(5) + String(z.ekranda).padStart(9));
   }
   console.log("");
   console.log("-- KAYDIRMA / LAYOUT OLAYLARI (sirayla) --");
-  if (!s.olay.length) console.log("   (HIC CAGRI YOK - kaydirma denenmemis demektir)");
+  if (!s.olay.length) console.log("   (HIC CAGRI YOK)");
   for (const o of s.olay) {
     let satir = "   " + String(o.tip).padEnd(15) + " scrollY " + String(o.yOnce).padStart(6) + " -> " + String(o.ySonra).padStart(6);
     if (o.kOnce !== null) satir += "  |  kartTop " + String(o.kOnce).padStart(7) + " -> " + String(o.kSonra).padStart(7);
@@ -128,9 +156,11 @@ async function olc(browser, hedef) {
   console.log("Hedef: " + MENU + "   Urun: " + URUN);
   const browser = await webkit.launch();
   for (const h of HEDEFLER) {
-    try { await olc(browser, h); } catch (e) { console.log("HATA " + h.name + ": " + e.message); }
+    for (const sen of SENARYOLAR) {
+      try { await olc(browser, h, sen); } catch (e) { console.log("HATA " + h.name + "/" + sen + ": " + e.message); }
+    }
   }
   await browser.close();
   console.log("");
-  console.log("BITTI. Karsilastir: HATA VEREN vs GECEN cihazda hangi olay farkli?");
+  console.log("KARSILASTIR: TEMIZ GECIP DENETIM-GIBI HATA VERIYORSA -> tetikleyici sayfanin doldurma durumu.");
 })();
