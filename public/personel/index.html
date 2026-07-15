@@ -93,10 +93,105 @@
       +'<div class="stat"><b>'+((d.avanslar||[]).reduce(function(s,a){return s+Number(a.tutar||0);},0)).toFixed(0)+' ₺</b><span>avans (toplam)</span></div>'
       +'</div><h3>Son Avanslar</h3>'+av+'</div>';
     document.getElementById('lo').onclick=async function(){await fetch('/api/personel/logout',{method:'POST'});loginView('Çıkış yapıldı.');};
-    document.getElementById('scan').onclick=function(){
-      app.innerHTML='<div class="card"><div class="durum disarida">Kamerayı açın</div><p class="msg">Telefonunuzun kamera uygulamasıyla kioskteki QR kodunu okutun. İşlem ekranı otomatik açılır.</p><button class="btn sec" onclick="location.reload()">Geri</button></div>';
-    };
+    document.getElementById('scan').onclick=function(){ scanView(d); };
   }
+
+  // ================= SAYFA ICI QR OKUYUCU (Bugra istegi, §74) =================
+  // ESKIDEN: "QR Okut" butonu SADECE yazi gosteriyordu; personel telefonun KAMERA UYGULAMASINI
+  // elle acmak zorundaydi. ARTIK: sayfa kamera iznini KENDI ister ve QR'i KENDI okur.
+  // UC KATMANLI (savunmaci) TASARIM:
+  //   1) BarcodeDetector -> cihazin YERLESIK okuyucusu (Android Chrome). Kutuphane YOK, hizli.
+  //   2) html5-qrcode    -> iOS/Safari BarcodeDetector DESTEKLEMEZ; SADECE o zaman CDN'den yuklenir.
+  //   3) Elle            -> ikisi de olmazsa ESKI davranis (kamera uygulamasi) => GERI ADIM OLMAZ.
+  var scanState={stream:null,raf:null,durdu:false,h5:null};
+  function scanStop(){
+    scanState.durdu=true;
+    if(scanState.raf){cancelAnimationFrame(scanState.raf);scanState.raf=null;}
+    if(scanState.stream){scanState.stream.getTracks().forEach(function(t){try{t.stop();}catch(e){}});scanState.stream=null;}
+    if(scanState.h5){try{scanState.h5.stop().catch(function(){});}catch(e){} scanState.h5=null;}
+  }
+  // QR icerigi BIZE ait olmali; baska sitenin QR'i KABUL EDILMEZ (guvenlik).
+  function tokenAyikla(metin){
+    if(!metin) return null;
+    try{ var u=new URL(metin, location.origin);
+         if(u.origin!==location.origin) return null;
+         return u.searchParams.get('punch'); }catch(e){ return null; }
+  }
+  function elleView(){
+    scanStop();
+    app.innerHTML='<div class="card"><div class="durum disarida">Kamerayı açın</div><p class="msg">Telefonunuzun kamera uygulamasıyla kioskteki QR kodunu okutun. İşlem ekranı otomatik açılır.</p><button class="btn sec" onclick="location.reload()">Geri</button></div>';
+  }
+  function kutuphaneYukle(){
+    return new Promise(function(res,rej){
+      if(window.Html5Qrcode) return res(true);
+      var sc=document.createElement('script');
+      sc.src='https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js';
+      sc.onload=function(){res(true);}; sc.onerror=function(){rej(new Error('yuklenemedi'));};
+      document.head.appendChild(sc);
+      setTimeout(function(){ if(!window.Html5Qrcode) rej(new Error('zaman asimi')); },12000);
+    });
+  }
+  async function scanView(me){
+    app.innerHTML='<div class="card">'
+      +'<div class="top"><b>QR Okut</b><button class="lo" id="scanKapat">Kapat</button></div>'
+      +'<div id="reader" style="width:100%;max-width:380px;margin:10px auto;border-radius:16px;overflow:hidden;background:#000;min-height:240px"></div>'
+      +'<p class="msg" id="scanMsg">Kamera açılıyor…</p>'
+      +'<button class="btn sec" id="scanElle">Kamera açılmıyor mu? Kamera uygulamasıyla okut</button>'
+      +'</div>';
+    var msg=document.getElementById('scanMsg');
+    document.getElementById('scanKapat').onclick=function(){ scanStop(); boot(); };
+    document.getElementById('scanElle').onclick=elleView;
+    scanState.durdu=false;
+    function basarili(metin){
+      var tok=tokenAyikla(metin);
+      if(!tok){ msg.textContent='Bu QR bize ait değil. Kiosk ekranındaki QR kodunu okutun.'; return false; }
+      scanStop();
+      if(navigator.vibrate){ try{navigator.vibrate(60);}catch(e){} }
+      msg.textContent='Okundu, işleminiz açılıyor…';
+      punchFlow(tok, me);
+      return true;
+    }
+    // --- KATMAN 1: cihazin yerlesik okuyucusu (Android) ---
+    if('BarcodeDetector' in window){
+      try{
+        var det=new window.BarcodeDetector({formats:['qr_code']});
+        var vid=document.createElement('video');
+        vid.setAttribute('playsinline','');
+        vid.muted=true; vid.style.cssText='width:100%;height:100%;object-fit:cover';
+        document.getElementById('reader').appendChild(vid);
+        scanState.stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}}});
+        vid.srcObject=scanState.stream; await vid.play();
+        msg.textContent='QR kodu çerçeveye getirin…';
+        var dongu=async function(){
+          if(scanState.durdu) return;
+          try{ var k=await det.detect(vid); if(k&&k.length&&basarili(k[0].rawValue)) return; }catch(e){}
+          scanState.raf=requestAnimationFrame(dongu);
+        };
+        scanState.raf=requestAnimationFrame(dongu);
+        return;
+      }catch(e){
+        scanStop(); scanState.durdu=false;
+        if(e&&e.name==='NotAllowedError'){ msg.textContent='Kamera izni verilmedi. Tarayıcı ayarlarından izin verebilir ya da aşağıdaki seçeneği kullanabilirsiniz.'; return; }
+        if(e&&e.name==='NotFoundError'){ msg.textContent='Kamera bulunamadı. Aşağıdaki seçeneği kullanabilirsiniz.'; return; }
+      }
+    }
+    // --- KATMAN 2: html5-qrcode (iOS/Safari yedegi) ---
+    try{ await kutuphaneYukle(); }
+    catch(e){ msg.textContent='QR okuyucu yüklenemedi (internet bağlantısı?). Kamera uygulamasıyla okutabilirsiniz.'; return; }
+    try{
+      document.getElementById('reader').innerHTML='';
+      scanState.h5=new window.Html5Qrcode('reader',{verbose:false});
+      await scanState.h5.start({facingMode:'environment'},{fps:10,qrbox:{width:220,height:220}},
+        function(metin){ basarili(metin); }, function(){});
+      msg.textContent='QR kodu çerçeveye getirin…';
+    }catch(e){
+      msg.textContent=(String(e).indexOf('NotAllowed')>=0)
+        ? 'Kamera izni verilmedi. Aşağıdaki seçeneği kullanabilirsiniz.'
+        : 'Kamera açılamadı. Aşağıdaki seçeneği kullanabilirsiniz.';
+      scanStop();
+    }
+  }
+  // ===========================================================================
 
   async function punchFlow(token, me){
     // once secenekleri al
