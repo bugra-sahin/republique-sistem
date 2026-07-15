@@ -17,8 +17,13 @@ async function processPosUpload(buffer) {
   const sheetName = workbook.SheetNames[0];
   const sheet = workbook.Sheets[sheetName];
   const rows = xlsx.utils.sheet_to_json(sheet);
+  // TESHIS (§82): sheet_to_json 1. SATIRI baslik sayar. PionPOS dosyasinda 1.satir
+  // "Adisyon Listesi" oldugu icin sutunlar __EMPTY_N adiyla gelir (E=__EMPTY_3=Masa Adi,
+  // H=__EMPTY_6=Acilis, L=__EMPTY_10=Kisi, N=__EMPTY_12=Toplam). DOGRULANDI (xlsx 0.18.5).
+  console.log('[eslestirme] dosyadan okunan ham satir:', rows.length);
 
   // 2. Veritabanından Tüm Taramaları Çek (Son 30 gün)
+    // TESHIS (§82): eslesme 0 cikarsa once BU IKI SAYIYA bak.
   const { rows: allScans } = await db.query(`SELECT * FROM scans WHERE timestamp >= NOW() - INTERVAL '30 days' ORDER BY timestamp ASC`);
   
   // Taramaları kullanıcı bazında (rep_id) geçmişleriyle gruplayalım
@@ -34,6 +39,19 @@ async function processPosUpload(buffer) {
       userHistory[scan.rep_id].firstSeenAdAt = new Date(scan.timestamp).getTime();
     }
   }
+
+    console.log('[eslestirme] son 30 gunde tarama sayisi:', allScans.length);
+
+  // ===== TESHIS TOPLAYICI (§82) - "neden eslesmedi" sorusunu OLCUMLE cevaplar =====
+  const tani = {
+    hamSatir: rows.length,
+    taramaSayisi: allScans.length,
+    gecerliAdisyon: 0,
+    masaHicYok: 0,
+    zamanTutmadi: 0,
+    pencere: '-5dk / +10dk',
+    ornekler: []
+  };
 
   const results = {
     totalAdRevenue: 0,
@@ -66,14 +84,36 @@ async function processPosUpload(buffer) {
     const tOpen = openTime.getTime();
     if (tOpen < minOpen) minOpen = tOpen;
     if (tOpen > maxOpen) maxOpen = tOpen;
-    const tableScans = allScans.filter(scan => {
-      const scanMasa = (scan.masa || '').toLowerCase().trim();
-      const posMasa = masaName.toLowerCase().trim();
-      if (scanMasa !== posMasa) return false;
-
+    const posMasa = String(masaName).toLowerCase().trim();
+    // ONCE sadece MASA'ya gore sup, SONRA zamana gore -> boylece "masa mi tutmadi,
+    // zaman mi tutmadi" AYRI AYRI olculebilir (eskiden tek filtrede birlesikti).
+    const masaEslesenler = allScans.filter(scan => (scan.masa || '').toLowerCase().trim() === posMasa);
+    const tableScans = masaEslesenler.filter(scan => {
       const scanTime = new Date(scan.timestamp).getTime();
       return scanTime >= (tOpen - 300000) && scanTime <= (tOpen + 600000);
     });
+
+    // ---- TESHIS (§82) ----
+    tani.gecerliAdisyon++;
+    if (masaEslesenler.length === 0) {
+      tani.masaHicYok++;
+      if (tani.ornekler.length < 6) tani.ornekler.push({ masa: posMasa, sebep: 'bu masada HIC tarama yok' });
+    } else if (tableScans.length === 0) {
+      tani.zamanTutmadi++;
+      // EN YAKIN taramanin adisyon acilisina farki (DAKIKA). Bu sayi her seyi soyler:
+      //   ~ +-180 dk  -> ZAMAN DILIMI hatasi (UTC vs +03)
+      //   ~ 10-30 dk  -> pencere cok dar (§5 sartnamesi -10dk/+30dk diyor, kod -5/+10)
+      const farklar = masaEslesenler
+        .map(s => Math.round((new Date(s.timestamp).getTime() - tOpen) / 60000))
+        .sort((a, b) => Math.abs(a) - Math.abs(b));
+      if (tani.ornekler.length < 6) tani.ornekler.push({
+        masa: posMasa,
+        sebep: 'masa VAR ama zaman tutmadi',
+        masadakiTarama: masaEslesenler.length,
+        enYakinFarkDk: farklar[0],
+        yorum: Math.abs(farklar[0]) > 120 ? 'ZAMAN DILIMI SUPHESI' : 'PENCERE DAR OLABILIR'
+      });
+    }
 
     // Masadaki benzersiz kişileri bul
     const uniqueUsersAtTable = [];
@@ -196,6 +236,8 @@ async function processPosUpload(buffer) {
     }
   }
 
+    results.tani = tani;
+  console.log('[eslestirme] TESHIS:', JSON.stringify(tani));
   return results;
 }
 
