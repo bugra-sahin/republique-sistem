@@ -244,12 +244,69 @@ function menuSchemaAl() {
   return _menuLdCache.v;
 }
 // index.html'i menu schema'si ENJEKTE EDEREK gonderir. Hata olursa duz dosyaya duser (misafir etkilenmez).
+// ---- FAQPage (§77 GEO) — "Ankara'da kokteyl bar nerede / kac lira / kacta aciliyor" gibi
+// GERCEK sorulara GERCEK verimizle cevap. Arastirma: SSS, AI asistanlarinin en cok alintiladigi format.
+// KURAL: fiyatlar data/menu.json'dan HESAPLANIR. Menu yoksa o soru HIC EKLENMEZ -> asla uydurma cevap.
+let _faqCache = { v: null, t: 0 };
+function _fiyatAraligi(kalip) {
+  try {
+    const fs = require("fs");
+    const p = path.join(__dirname, "data", "menu.json");
+    if (!fs.existsSync(p)) return null;
+    const ham = JSON.parse(fs.readFileSync(p, "utf8"));
+    let cats = (ham.result && ham.result.categories) || ham.categories || ham;
+    if (!Array.isArray(cats)) return null;
+    const c = cats.find(function (x) { return x && new RegExp(kalip, "i").test(x.name || ""); });
+    if (!c) return null;
+    const f = [];
+    for (const sec of (c.sections || [])) for (const u of (sec.products || [])) {
+      const n = Number(u.price);
+      if (n > 0 && u.inStock !== false && !/personel|ekstra\s*istek/i.test(u.name || "")) f.push(n);
+    }
+    if (!f.length) return null;
+    return { min: Math.min.apply(null, f), max: Math.max.apply(null, f), adet: f.length };
+  } catch (e) { return null; }
+}
+function faqSchemaUret() {
+  try {
+    const q = [];
+    const ekle = function (soru, cevap) {
+      q.push({ "@type": "Question", "name": soru, "acceptedAnswer": { "@type": "Answer", "text": cevap } });
+    };
+    ekle("Republique Tunalı nerede?",
+      "Republique Tunalı, Ankara'da Çankaya ilçesinde, Remzi Oğuz Arık Mahallesi Bestekar Caddesi No 65/B adresindedir (Tunalı Hilmi çevresi). Telefon: 0552 656 51 59.");
+    ekle("Republique Tunalı kaçta açılıyor, çalışma saatleri nedir?",
+      "Republique Tunalı her gün 12:00 ile 01:00 saatleri arasında açıktır.");
+    ekle("Republique Tunalı nasıl bir mekan?",
+      "Ankara Tunalı'da kokteyl bar ve social house konseptinde bir mekandır: imza kokteyller, geniş viski ve içecek seçkisi ile yemek menüsü bir arada sunulur.");
+    const kok = _fiyatAraligi("kokteyl");
+    if (kok) ekle("Republique Tunalı'da kokteyl fiyatları ne kadar?",
+      "Kokteyl menüsünde " + kok.adet + " seçenek vardır; fiyatlar " + kok.min + " TL ile " + kok.max + " TL arasında değişir. Güncel menü site üzerinden görülebilir.");
+    const vis = _fiyatAraligi("viski");
+    if (vis) ekle("Republique Tunalı'da viski çeşitleri ve fiyatları nedir?",
+      "Viski menüsünde " + vis.adet + " seçenek bulunur; fiyatlar " + vis.min + " TL ile " + vis.max + " TL arasındadır.");
+    const yem = _fiyatAraligi("yiyecek");
+    if (yem) ekle("Republique Tunalı'da yemek var mı?",
+      "Evet. Yiyecek menüsünde " + yem.adet + " seçenek vardır; fiyatlar " + yem.min + " TL ile " + yem.max + " TL arasındadır. Burger ve pizza gibi seçeneklerin yanı sıra farklı tabaklar bulunur.");
+    if (!q.length) return "";
+    return '<script type="application/ld+json">' +
+      JSON.stringify({ "@context": "https://schema.org", "@type": "FAQPage", "inLanguage": "tr-TR", "mainEntity": q })
+        .replace(/</g, "\\u003c") + '</script>';
+  } catch (e) { console.error("faqSchemaUret:", e.message); return ""; }
+}
+function faqSchemaAl() {
+  const now = Date.now();
+  if (_faqCache.v !== null && now - _faqCache.t < 300000) return _faqCache.v;
+  _faqCache = { v: faqSchemaUret(), t: now };
+  return _faqCache.v;
+}
+
 function menuSayfasiGonder(res) {
   const dosya = path.join(__dirname, "public", "index.html");
   try {
     const fs = require("fs");
     let html = fs.readFileSync(dosya, "utf8");
-    const ld = menuSchemaAl();
+    const ld = menuSchemaAl() + faqSchemaAl();
     if (ld && html.includes("</head>")) html = html.replace("</head>", ld + "</head>");
     return res.type("html").send(html);
   } catch (e) { return res.sendFile(dosya); }
@@ -321,7 +378,22 @@ app.get("/blog/:slug", (req, res) => {
         + '<meta name="twitter:title" content="' + nitelikKacis(bloBaslik) + '">'
         + (bloAciklama ? '<meta name="twitter:description" content="' + nitelikKacis(bloAciklama) + '">' : '')
         + '<meta name="twitter:image" content="' + nitelikKacis(bloGorsel) + '">';
-      if (html.includes("</head>")) html = html.replace("</head>", '<link rel="stylesheet" href="/blog/blog.css">' + rest + twitter + '</head>');
+      // 2c) ARTICLE SCHEMA (§77 GEO): tazelik + otorite sinyali. AI motorlari guncelligi olcuyor;
+      //     tarihi/yazari olmayan icerik geriliyor. Tarih: dosyanin GERCEK degisim zamani (uydurma yok).
+      let bloTarih = new Date().toISOString();
+      try { bloTarih = fs.statSync(f).mtime.toISOString(); } catch (e2) {}
+      const makale = '<script type="application/ld+json">' + JSON.stringify({
+        "@context": "https://schema.org", "@type": "BlogPosting",
+        "headline": bloBaslik.slice(0, 110),
+        "description": bloAciklama || undefined,
+        "inLanguage": "tr-TR",
+        "datePublished": bloTarih, "dateModified": bloTarih,
+        "author": { "@type": "Organization", "name": "Republique Tunalı" },
+        "publisher": { "@type": "Organization", "name": "Republique Tunalı",
+          "logo": { "@type": "ImageObject", "url": "https://republique.tr/logo.png" } },
+        "mainEntityOfPage": { "@type": "WebPage", "@id": "https://republique.tr/blog/" + curSlug }
+      }).replace(/</g, "\\u003c") + '</script>';
+      if (html.includes("</head>")) html = html.replace("</head>", '<link rel="stylesheet" href="/blog/blog.css">' + rest + twitter + makale + '</head>');
       if (/<body[^>]*>/.test(html)) html = html.replace(/<body[^>]*>/, (m) => m + bar);
       else html = bar + html;
       if (html.includes("</body>")) html = html.replace("</body>", foot + "</body>");
