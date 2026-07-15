@@ -59,12 +59,34 @@
       //    ve atlama sonrasi pencereyi tazele.
       openCard(card);
       if(typeof window.raiPinCategory==='function'){try{window.raiPinCategory(card.closest('.category-section'));}catch(e){}}
+      // FIX (2026-07-15, §79): SAFARI/iPhone-12'de kart EKRANA GELMIYORDU.
+      // Denetim (webkit) bulmustu: [iPhone-12-SAFARI][ai-kart] "kart ekranda degil".
+      // iPhone-SE Safari'de ve TUM Chromium'da sorun YOKTU -> motor + viewport farki.
+      // NEDEN: tek seferlik "olc + window.scrollTo" atlayisi, pencereli render atlama SIRASINDA
+      //   yukseklikleri degistirdigi icin WebKit'te hedefi kacirabiliyor (olculen y bayatliyor).
+      // COZUM: KOR ATLAYIS YOK -> scrollIntoView ile git, SONRA OLC, ekranda DEGILSE TEKRAR DENE.
+      //   Kendi kendini duzeltir; motor farkini tahmin etmeye gerek kalmaz. En fazla 3 deneme.
+      //   (scrollIntoView'in ayni sayfada WebKit'te CALISTIGI kanitli: denetimin kategori testi
+      //    bunu kullaniyor ve Safari'de [ok] veriyor. behavior verilmez -> ANINDA, smooth DEGIL.)
       requestAnimationFrame(function(){requestAnimationFrame(function(){
         try{
-          var r=card.getBoundingClientRect();
-          var y=r.top+window.pageYOffset-Math.max(0,(window.innerHeight-r.height)/2);
-          window.scrollTo(0,Math.max(0,y));
-          if(typeof window.__raiEnsureWindow==='function')window.__raiEnsureWindow();
+          var deneme=0;
+          var git=function(){
+            try{ card.scrollIntoView({block:'center', inline:'nearest'}); }catch(e){
+              var r=card.getBoundingClientRect();
+              window.scrollTo(0,Math.max(0,r.top+window.pageYOffset-Math.max(0,(window.innerHeight-r.height)/2)));
+            }
+            if(typeof window.__raiEnsureWindow==='function'){try{window.__raiEnsureWindow();}catch(e){}}
+          };
+          var dogrula=function(){
+            var r=card.getBoundingClientRect();
+            var ekranda = r.top > -50 && r.top < window.innerHeight;
+            if(ekranda || deneme>=3) return;   // oldu ya da pes et (sonsuz dongu YOK)
+            deneme++; git();
+            requestAnimationFrame(dogrula);
+          };
+          git();
+          requestAnimationFrame(dogrula);
         }catch(e){}
       });});
       return true;
