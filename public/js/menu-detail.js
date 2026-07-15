@@ -77,11 +77,19 @@
               window.scrollTo(0,Math.max(0,r.top+window.pageYOffset-Math.max(0,(window.innerHeight-r.height)/2)));
             }
             if(typeof window.__raiEnsureWindow==='function'){try{window.__raiEnsureWindow();}catch(e){}}
+            // FIX (2026-07-15, §80): OLCULDU (tests/webkit-teshis.js) -> ESKI SIRA TERSTI.
+            //   scrollIntoView karti ekrana getiriyordu (kartTop 262), HEMEN ARDINDAN cagrilan
+            //   __raiEnsureWindow pencereli render'i tazeleyip sayfayi 56404 -> 58620 BUYUTUYOR
+            //   ve karti 262 -> 2478'e FIRLATIYORDU (= ekran disi). Yani 'once kaydir, SONRA
+            //   layout'u degistir' yanlis siraydi; kart kaydirildigi yerde KALMIYORDU.
+            // COZUM: pencere tazelendikten SONRA TEKRAR kaydir -> git()'in SON isi DAIMA kaydirma,
+            //   layout degisimi DEGIL. Boylece kaydirmadan sonra layout artik oynamaz.
+            try{ card.scrollIntoView({block:'center', inline:'nearest'}); }catch(e){}
           };
           var dogrula=function(){
             var r=card.getBoundingClientRect();
             var ekranda = r.top > -50 && r.top < window.innerHeight;
-            if(ekranda || deneme>=3) return;   // oldu ya da pes et (sonsuz dongu YOK)
+            if(ekranda || deneme>=5) return;   // oldu ya da pes et (sonsuz dongu YOK)
             deneme++; git();
             requestAnimationFrame(dogrula);
           };
