@@ -11,6 +11,16 @@
 # CHAT=1 verilirse AI sohbet testi de kosar (GERCEK Anthropic cagrisi, 1 mesaj).
 set -u
 URL_HEDEF="${URL:-https://test2.republique.tr}"
+# KISAYOL (2026-07-15, §80-I): Hetzner web konsolunda **iki nokta yazilamaz** -> ":" tusu ENTER
+#   gibi davranip komutu IKIYE BOLUYOR. KANIT: `echo a:b` -> "a" + "b: command not found".
+#   Yani `URL=https://test1...` konsola ELLE YAZILAMAZ. Bu yuzden hedefi ARGUMAN ile seciyoruz:
+#       bash tests/run-audit.sh test1     -> CANLI (test1) denetlenir   [iki nokta YOK]
+#       bash tests/run-audit.sh           -> test2 (varsayilan)
+#   (Terfi sonrasi test1'de olcum ZORUNLU oldugu icin bu kisayol kalicidir.)
+case "${1:-}" in
+  test1) URL_HEDEF="https://test1.republique.tr" ;;
+  test2) URL_HEDEF="https://test2.republique.tr" ;;
+esac
 MASA_HEDEF="${MASA:-b-9}"
 CHAT_ACIK="${CHAT:-0}"
 IMAJ="mcr.microsoft.com/playwright:v1.47.0-jammy"
@@ -24,12 +34,14 @@ echo
 docker run --rm --network host \
   -e "URL=$URL_HEDEF" -e "MASA=$MASA_HEDEF" -e "CHAT=$CHAT_ACIK" \
   -v "$DIZIN:/tests" -w /tests \
-  "$IMAJ" sh -c 'export NODE_PATH=$(npm root -g); [ -d "$NODE_PATH/playwright" ] || [ -d node_modules/playwright ] || npm i --no-audit --no-fund playwright@1.47.0; node ux-audit.js'
-KOD=$?
+  "$IMAJ" sh -c 'export NODE_PATH=$(npm root -g); [ -d "$NODE_PATH/playwright" ] || [ -d node_modules/playwright ] || npm i --no-audit --no-fund playwright@1.47.0; node ux-audit.js' 2>&1 | tee "$DIZIN/report/son-kosum.txt"
+KOD=${PIPESTATUS[0]}
 echo
 if [ "$KOD" -eq 0 ]; then
   echo "SONUC: TEMIZ (sorun yok)"
+  echo "Tam cikti (HTTP): https://test2.republique.tr/denetim/son-kosum.txt"
 else
   echo "SONUC: SORUN VAR -> tests/report/ux-audit.json ve tests/report/*.png bak"
+  echo "Tam cikti (HTTP): https://test2.republique.tr/denetim/son-kosum.txt"
 fi
 exit $KOD
