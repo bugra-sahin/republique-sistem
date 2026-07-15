@@ -144,6 +144,30 @@ app.use("/api/admin", (req, res, next) => {
 
 app.use(express.static(path.join(__dirname, 'public')));
 
+// EKSIK URUN GORSELI -> 404 YERINE REPUBLIQUE LOGOLU YER TUTUCU (§71, Bugra'nin istegi).
+// Buraya DUSMEK demek: express.static dosyayi BULAMADI = gorsel yerel onbellekte yok.
+// Misafir kirik/bos resim gormesin diye, FOTOGRAFSIZ urunlerde kullanilan AYNI logo yer
+// tutucusu 200 ile servis edilir (public/js/app.js icindeki defaultImg ile BIREBIR AYNI SVG).
+// Istemcide zaten onerror yedegi var; bu sunucu tarafi yedek onu tamamlar ve BOSA GIDEN
+// 404 isteklerini bitirir (denetimdeki [ag-hata]/[js-hata] gurultusunun kaynagi buydu).
+// SORUNU GIZLEMESIN diye: her eksik dosya adi BIR KEZ log'a yazilir ->
+//   docker logs staging-app-staging-1  (arama: "gorsel-eksik")
+const EKSIK_GORSELLER = new Set();
+const YER_TUTUCU_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="90" height="90" fill="#0a1f16">'
+  + '<rect width="90" height="90" fill="#05100c"/>'
+  + '<text x="45" y="45" fill="#d4af37" font-size="12" font-family="sans-serif"'
+  + ' text-anchor="middle" alignment-baseline="middle">REPUBLIQUE</text></svg>';
+app.use('/images', (req, res, next) => {
+  if (!/\.(webp|jpg|jpeg|png)$/i.test(req.path)) return next();
+  if (!EKSIK_GORSELLER.has(req.path)) {
+    EKSIK_GORSELLER.add(req.path);
+    console.warn('[gorsel-eksik] yer tutucu servis edildi -> /images' + req.path);
+  }
+  res.set('Content-Type', 'image/svg+xml');
+  res.set('Cache-Control', 'public, max-age=300'); // kisa: gercek gorsel gelince hemen gorunsun
+  res.status(200).send(YER_TUTUCU_SVG);
+});
+
 const upload = multer({ storage: multer.memoryStorage() });
 
 app.get("/health", (req, res) => {
