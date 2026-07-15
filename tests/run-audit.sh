@@ -34,12 +34,14 @@ echo
 docker run --rm --network host \
   -e "URL=$URL_HEDEF" -e "MASA=$MASA_HEDEF" -e "CHAT=$CHAT_ACIK" \
   -v "$DIZIN:/tests" -w /tests \
-  "$IMAJ" sh -c 'export NODE_PATH=$(npm root -g); [ -d "$NODE_PATH/playwright" ] || [ -d node_modules/playwright ] || npm i --no-audit --no-fund playwright@1.47.0; node ux-audit.js'
-KOD=$?
+  "$IMAJ" sh -c 'export NODE_PATH=$(npm root -g); [ -d "$NODE_PATH/playwright" ] || [ -d node_modules/playwright ] || npm i --no-audit --no-fund playwright@1.47.0; node ux-audit.js' 2>&1 | tee "$DIZIN/report/son-kosum.txt"
+KOD=${PIPESTATUS[0]}
 echo
 if [ "$KOD" -eq 0 ]; then
   echo "SONUC: TEMIZ (sorun yok)"
+  echo "Tam cikti (HTTP): https://test2.republique.tr/denetim/son-kosum.txt"
 else
   echo "SONUC: SORUN VAR -> tests/report/ux-audit.json ve tests/report/*.png bak"
+  echo "Tam cikti (HTTP): https://test2.republique.tr/denetim/son-kosum.txt"
 fi
 exit $KOD
