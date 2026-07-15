@@ -16,7 +16,13 @@
     return;
   }
 
-  const history = [];
+  // FIX (2026-07-14, Fable): SOHBET KALICILIGI. iPhone'da sekme cokup "sayfa yenilendi"ginde
+  // sohbet RAM'de oldugu icin kayboluyordu. Artik her mesaj sessionStorage'a yazilir (masa
+  // anahtarli, son 30 mesaj); sayfa yeniden yuklenince sohbet AYNEN geri gelir.
+  const HKEY = 'raiHist:' + table;
+  let history = [];
+  try { history = JSON.parse(sessionStorage.getItem(HKEY) || '[]'); if (!Array.isArray(history)) history = []; } catch (e) { history = []; }
+  function saveHist() { try { sessionStorage.setItem(HKEY, JSON.stringify(history.slice(-30))); } catch (e) {} }
   let started = false;
 
   const css = `
@@ -63,6 +69,7 @@
   fab.className = 'rai-fab';
   fab.innerHTML = `<div class="ic"><span class="material-icons-round">auto_awesome</span></div><div class="greet">Hoş geldiniz! Sorularınızı Republique AI'a sorabilirsiniz.</div>`;
   document.body.appendChild(fab);
+  if (history.length) fab.classList.add('round'); // onceki sohbeti olan misafire buyuk karsilama balonu tekrar gosterilmez
 
   const panel = document.createElement('div');
   panel.className = 'rai-panel';
@@ -126,7 +133,15 @@
   function open() {
     fab.classList.add('hidden');
     panel.classList.add('open');
-    if (!started) { started = true; addMsg('assistant', 'Merhaba, hoş geldiniz! Bu akşam için ne önermemi istersiniz?'); }
+    if (!started) {
+      started = true;
+      if (history.length) {
+        // Onceki sohbeti (reload/cokme sonrasi) AYNEN geri yukle
+        history.forEach(function (h) { if (h && h.content) addMsg(h.role === 'user' ? 'user' : 'assistant', h.content); });
+      } else {
+        addMsg('assistant', 'Merhaba, hoş geldiniz! Bu akşam için ne önermemi istersiniz?');
+      }
+    }
     lockBody();
     if (window.visualViewport) { window.visualViewport.addEventListener('resize', syncVV); window.visualViewport.addEventListener('scroll', syncVV); syncVV(); }
     // Mobilde otomatik focus SAYFAYI KAYDIRIR -> masaustunde focus, dokunmatikte kullanici kendi dokunur
@@ -147,14 +162,25 @@
   // 390px'de sol-alt "Uye Ol/Giris" butonu ile sag-alt balon ust uste binmesin. (Panel acilmadiysa.)
   setTimeout(function () { if (!panel.classList.contains('open')) fab.classList.add('round'); }, 6000);
 
-  async function callApi(text) {
+  // FIX (2026-07-14, Fable): 30sn zaman asimi + tek otomatik yeniden deneme.
+  // (Sonnet yanit gecikmesi/gecici ag hatasi "Baglanti sorunu yasadim"a dusuruyordu.)
+  function fetchChat(text) {
+    const ctl = ('AbortController' in window) ? new AbortController() : null;
+    const t = ctl ? setTimeout(function () { try { ctl.abort(); } catch (e) {} }, 30000) : null;
     return fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: text, table: table, history: history.filter(h => h._sent) }) }).then(r => r.json());
+      body: JSON.stringify({ message: text, table: table, history: history.filter(h => h._sent !== false) }),
+      signal: ctl ? ctl.signal : undefined })
+      .then(r => r.json())
+      .finally(function () { if (t) clearTimeout(t); });
+  }
+  async function callApi(text) {
+    try { return await fetchChat(text); }
+    catch (e) { await new Promise(r => setTimeout(r, 1200)); return fetchChat(text); }
   }
   async function send(retryText) {
     const text = retryText || inp.value.trim();
     if (!text) return;
-    if (!retryText) { inp.value = ''; addMsg('user', text); history.push({ role: 'user', content: text, _sent: true }); }
+    if (!retryText) { inp.value = ''; addMsg('user', text); history.push({ role: 'user', content: text, _sent: true }); saveHist(); }
     sendBtn.disabled = true;
     const typing = document.createElement('div');
     typing.className = 'rai-typing'; typing.textContent = 'yazıyor...';
@@ -169,8 +195,13 @@
           if (sec <= 0) { clearInterval(iv); w.remove(); send(text); return; } sec--; };
         tick(); const iv = setInterval(tick, 1000); return;
       }
-      const reply = (data && data.reply) || 'Şu an yanıt veremiyorum.';
-      addMsg('assistant', reply); history.push({ role: 'assistant', content: reply, _sent: true });
+      // FIX (2026-07-14, Fable): model bazen SADECE [[SHOW]] etiketi donduruyor -> reply "" (bos).
+      // Eski kod bosu "Su an yanit veremiyorum" yapiyordu; altinda "kartini ac" butonu olunca
+      // celiskili/bozuk gorunuyordu. Bos + show/goto varsa dogal bir cumle koy.
+      let reply = (data && data.reply) || '';
+      if (!reply && data && (data.show || data.goto)) reply = 'Buyurun, hemen göstereyim:';
+      if (!reply) reply = 'Şu an yanıt veremiyorum.';
+      addMsg('assistant', reply); history.push({ role: 'assistant', content: reply, _sent: true }); saveHist();
       // Gorus alindi + tekrar gelen misafir + olumsuz degil -> Google degerlendirme linkini nazikce goster
       if (data && data.googleDavet && data.googleUrl) {
         const g = document.createElement('a');
@@ -202,7 +233,7 @@
               //      calismiyor (0'da kaliyor) -> 'instant' guvenilir sekilde hedefe atlar.
               if (sec) sec.scrollIntoView({ behavior: 'instant', block: 'start' });
               else if (b) b.scrollIntoView({ behavior: 'instant', block: 'start' });
-              // Uzak bir noktaya atladik: pencereli render'a 'yeni konuma gore doldur/bosalt' de.
+              // Uzak bir noktaya atladik: pencereli render'a "yeni konumuna gore doldur/bosalt" de.
               // (scroll olayi programatik atlamada gec/hic gelmeyebilir -> hedef bolum bos gorunurdu.)
               if (typeof window.__raiEnsureWindow === 'function') window.__raiEnsureWindow();
             } catch (e) {}
@@ -213,7 +244,16 @@
       if (data && data.show) {
         addActionBtn(data.show + ' kartını aç', function () {
           close();
-          setTimeout(function () { if (typeof window.raiShowProduct === 'function') { try { window.raiShowProduct(data.show); } catch (e) {} } }, 80);
+          setTimeout(function () {
+            let ok = false;
+            if (typeof window.raiShowProduct === 'function') { try { ok = !!window.raiShowProduct(data.show); } catch (e) { ok = false; } }
+            // FIX (2026-07-14, Fable): urun bulunamazsa SESSIZCE hicbir sey olmuyordu
+            // ("karta goturmedi"). Artik sohbet yeniden acilip nazik bir aciklama gosterilir.
+            if (!ok) {
+              open();
+              addMsg('assistant', 'Kartı şu an açamadım — menüde "' + data.show + '" adıyla bulamadım. Garsonumuza sorabilirsiniz, yardımcı olacaktır.');
+            }
+          }, 80);
         });
       }
     } catch (e) { typing.remove(); addMsg('assistant', 'Bağlantı sorunu yaşadım, birazdan tekrar deneyin.'); }
