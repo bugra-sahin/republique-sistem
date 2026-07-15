@@ -309,6 +309,18 @@ async function denetle(browser, hedef) {
     { name: 'iPhone-12-SAFARI', dev: devices['iPhone 12'], motor: 'webkit' },
     { name: 'iPhone-SE-SAFARI', dev: devices['iPhone SE'], motor: 'webkit' },
   ];
+  // YENI iPHONE'LAR (§79, Bugra: "iPhone 15-17 gibi seyleri de kontrol et").
+  // Playwright surumu bu cihazi TANIMIYORSA sessizce atlanir (undefined hedef eklenmez) ->
+  // Playwright guncellendiginde kendiliginden devreye girer, test PATLAMAZ.
+  // Not: yeni iPhone'lar Safari/WebKit'tir; en genis telefon ekrani da burada.
+  for (const [ad, cihaz] of [
+    ['iPhone-15-SAFARI', 'iPhone 15'],
+    ['iPhone-15-Pro-Max-SAFARI', 'iPhone 15 Pro Max'],
+    ['iPhone-14-Pro-Max-SAFARI', 'iPhone 14 Pro Max'],
+  ]) {
+    if (devices[cihaz]) hedefler.push({ name: ad, dev: devices[cihaz], motor: 'webkit' });
+    else console.log('  [atlandi] ' + cihaz + ' bu Playwright surumunde YOK');
+  }
   for (const h of hedefler) {
     try { const b = await motorAl(h.motor); await denetle(b, h); }
     catch (e) { BAD(h.name, 'olumcul', e.message); }
