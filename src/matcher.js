@@ -49,7 +49,7 @@ async function processPosUpload(buffer) {
     gecerliAdisyon: 0,
     masaHicYok: 0,
     zamanTutmadi: 0,
-    pencere: '-5dk / +10dk',
+    pencere: '-30dk / +10dk (§5)',
     ornekler: []
   };
 
@@ -90,7 +90,16 @@ async function processPosUpload(buffer) {
     const masaEslesenler = allScans.filter(scan => (scan.masa || '').toLowerCase().trim() === posMasa);
     const tableScans = masaEslesenler.filter(scan => {
       const scanTime = new Date(scan.timestamp).getTime();
-      return scanTime >= (tOpen - 300000) && scanTime <= (tOpen + 600000);
+      // §82 PENCERE DUZELTMESI (OLCUMLE bulundu):
+      //   ESKI: (tOpen - 300000) = taramadan sadece 5 DAKIKA once -> GERCEK HAYATTA COGU
+      //   ESLESME KACIYORDU. Cunku §5'te yazan gercek akis: "Once QR taranir, SONRA adisyon
+      //   acilir (tipik: tarama 12:50 -> adisyon 12:55)". Yani tarama, adisyon acilisindan
+      //   DAKIKALARCA ONCE olur; 5 dakika cok dar.
+      //   KANIT (test2, gercek tarama verisi): adisyon 22:40 icin en yakin tarama -16 dk ->
+      //   ESKI kod bunu REDDEDIYORDU. Tam da yakalamamiz gereken senaryo buydu.
+      //   §5 SARTNAMESI: "adisyon acilisi, taramadan sonra <=30 dk VEYA taramadan once <=10 dk"
+      //   -> tarama araligi = [acilis - 30dk , acilis + 10dk]
+      return scanTime >= (tOpen - 1800000) && scanTime <= (tOpen + 600000);
     });
 
     // ---- TESHIS (§82) ----
