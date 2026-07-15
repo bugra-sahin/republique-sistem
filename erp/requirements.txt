@@ -1,3 +1,14 @@
+
+# lxml: Fatura portallarindan (Mikrogrup vb.) inen "Excel" dosyalari aslinda .xls uzantili
+# HTML TABLOSU olabiliyor. main.py bu durumda pandas.read_html'e dusuyor; read_html ise lxml
+# olmadan calismaz -> "Import lxml failed. Use pip or conda to install the lxml package." hatasi.
+# SADECE okuma/ayristirma kutuphanesi; veritabanina veya girilmis verilere DOKUNMAZ.
+lxml
+# read_html icin yedek ayristirici (lxml cozemezse pandas bunlara duser).
+html5lib
+beautifulsoup4
+# xlrd: main.py gercek eski .xls formatinda buna dusuyor; kurulu degildi.
+xlrd
 fastapi
 uvicorn
 sqlalchemy

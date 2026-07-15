@@ -23,12 +23,14 @@ git reset --hard origin/main >> "$LOG" 2>&1
 docker compose up -d --build >> "$LOG" 2>&1
 echo "$(date) TERFI TAMAM (test1 guncellendi)" >> "$LOG"
 
-# 4) Staging'i de guncel main ile esitle (sonraki testler icin)
+# 4) Staging'i GELISTIRME DALINA esitle (main'e DEGIL!) -> test2 uzerindeki devam eden isler
+#    gece SILINMESIN. test2 hep dali (bugra-sahin-patch-1 = son isler) gosterir, geri gitmez.
+STAGING_BRANCH="bugra-sahin-patch-1"
 cd /opt/republique-staging || exit 0
 git fetch origin >> "$LOG" 2>&1
-git reset --hard origin/main >> "$LOG" 2>&1
+git reset --hard origin/$STAGING_BRANCH >> "$LOG" 2>&1
 docker compose -p staging -f docker-compose.staging.yml up -d --build >> "$LOG" 2>&1
-echo "$(date) staging esitlendi" >> "$LOG"
+echo "$(date) staging dala ($STAGING_BRANCH) esitlendi" >> "$LOG"
 
 # Eski yedek tag'leri sinirla (son 30 tut)
 cd /opt/republique && git tag | grep '^prod-' | sort | head -n -30 | while read t; do git tag -d "$t" >/dev/null 2>&1; done
