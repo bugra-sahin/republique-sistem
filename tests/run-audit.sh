@@ -24,7 +24,7 @@ echo
 docker run --rm --network host \
   -e "URL=$URL_HEDEF" -e "MASA=$MASA_HEDEF" -e "CHAT=$CHAT_ACIK" \
   -v "$DIZIN:/tests" -w /tests \
-  "$IMAJ" node ux-audit.js
+  "$IMAJ" sh -c 'export NODE_PATH=$(npm root -g); [ -d "$NODE_PATH/playwright" ] || [ -d node_modules/playwright ] || npm i --no-audit --no-fund playwright@1.47.0; node ux-audit.js'
 KOD=$?
 echo
 if [ "$KOD" -eq 0 ]; then
