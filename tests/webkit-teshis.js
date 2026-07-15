@@ -30,6 +30,7 @@ const HEDEFLER = [
   { name: "iPhone-SE-SAFARI", dev: devices["iPhone SE"] }
 ];
 const SENARYOLAR = ["TEMIZ", "DENETIM-GIBI"];
+const OZET = [];   // konsol geriye kaydirilamiyor -> en sonda toplu tablo basilir
 
 async function olc(browser, hedef, senaryo) {
   console.log("");
@@ -132,6 +133,7 @@ async function olc(browser, hedef, senaryo) {
   }, URUN);
 
   const son = s.zaman[s.zaman.length - 1];
+  OZET.push({ cihaz: hedef.name, senaryo: senaryo, gecti: !!son.ekranda, kartTop: son.kartTop });
   console.log("raiShowProduct dondu: " + s.donen + "   ekran " + s.innerW + "x" + s.innerH);
   console.log(">>> DENETIM SONUCU OLURDU: " + (son.ekranda ? "GECER" : "*** HATA (kart ekranda degil) ***"));
   console.log("");
@@ -161,6 +163,12 @@ async function olc(browser, hedef, senaryo) {
     }
   }
   await browser.close();
+  console.log("");
+  console.log("================ OZET (denetimin bakacagi an: 1200ms) ================");
+  for (const o of OZET) {
+    console.log("  " + String(o.cihaz).padEnd(18) + String(o.senaryo).padEnd(15)
+      + (o.gecti ? "GECER" : "*** HATA ***").padEnd(14) + " kartTop=" + o.kartTop);
+  }
   console.log("");
   console.log("KARSILASTIR: TEMIZ GECIP DENETIM-GIBI HATA VERIYORSA -> tetikleyici sayfanin doldurma durumu.");
 })();
