@@ -48,7 +48,26 @@
       const cards=[...document.querySelectorAll('.product-card')];
       let card=cards.find(c=>{const n=c.querySelector('.product-name');return n&&norm(n.textContent)===target;});
       if(!card) card=cards.find(c=>{const n=c.querySelector('.product-name');return n&&(norm(n.textContent).includes(target)||target.includes(norm(n.textContent)));});
-      if(card){card.scrollIntoView({behavior:'smooth',block:'center'});openCard(card);return true;}
+      if(!card) return false;
+      // FIX (2026-07-14, Fable): "karta goturmedi + sayfa yenilendi" kok cozumu.
+      // 1) MODALI ONCE AC: scroll ne yaparsa yapsin misafir karti ANINDA gorur.
+      // 2) behavior:'smooth' BU SAYFADA CALISMIYOR (tembel/pencereli render animasyon sirasinda
+      //    yukseklikleri degistiriyor; WebKit smooth'u iptal ediyor -> masaustunde 0'da kaliyor,
+      //    iPhone'da buyuk fill + smooth kompozit birlesince sekme cokup yenileniyordu).
+      //    Cozum: layout otursun diye 2x rAF bekle, konumu OLC, tek INSTANT atlayisla git.
+      // 3) Pencereli render'a hedefi PINLE (unfill hedef kartin kategorisini bosaltmasin)
+      //    ve atlama sonrasi pencereyi tazele.
+      openCard(card);
+      if(typeof window.raiPinCategory==='function'){try{window.raiPinCategory(card.closest('.category-section'));}catch(e){}}
+      requestAnimationFrame(function(){requestAnimationFrame(function(){
+        try{
+          var r=card.getBoundingClientRect();
+          var y=r.top+window.pageYOffset-Math.max(0,(window.innerHeight-r.height)/2);
+          window.scrollTo(0,Math.max(0,y));
+          if(typeof window.__raiEnsureWindow==='function')window.__raiEnsureWindow();
+        }catch(e){}
+      });});
+      return true;
     }catch(e){}
     return false;
   };

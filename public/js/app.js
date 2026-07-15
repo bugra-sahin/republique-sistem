@@ -211,22 +211,37 @@ document.addEventListener('DOMContentLoaded', () => {
       const catSection = document.createElement('div');
       catSection.id = catId;
       catSection.className = 'category-section';
-      catSection.style.minHeight = '60px'; // bos kategori tetiklenebilsin
+      // TEMBEL RENDER + KAYDIRMA FIX: bos kategoriye GERCEKCI rezerve yukseklik ver (urun sayisindan tahmin).
+      // Boylece sayfa acilista TAM yukseklikte olur -> "menu bitti" yanilsamasi + dolan kategori buyuyunce
+      // alttakilerin itilmesi (kaydiran misafirin cat-2..cat-5'i hic gormemesi) ortadan kalkar.
+      // Kart cizilmedigi icin bellek korunur (acilista yalniz ~117 kart). fillCategory doldurunca minHeight silinir.
+      let _est = 12;
+      (category.sections || []).forEach(s => {
+        if (s.isVisible === false) return;
+        _est += 46; // bolum basligi
+        (s.products || []).forEach(p => {
+          if (p.inStock === false) return;
+          const _n = (p.variations && p.variations.length) ? p.variations.filter(v => v.inStock !== false).length : 1;
+          _est += Math.max(1, _n) * 112; // urun karti ~108px + bosluk
+        });
+      });
+      catSection.style.minHeight = Math.max(60, _est) + 'px';
       categoryElements.push({ id: catId, btn: btn });
       menuContainer.appendChild(catSection);
       pending.push({ catSection: catSection, category: category });
     });
 
-    // TEMBEL RENDER: kategori ekrana ~800px yaklasinca urunlerini olustur.
+    // TEMBEL RENDER: kategori ekrana ~1500px yaklasinca urunlerini olustur.
+    let io = null;
     if ('IntersectionObserver' in window) {
-      const io = new IntersectionObserver((entries) => {
+      io = new IntersectionObserver((entries) => {
         entries.forEach(e => {
           if (e.isIntersecting) {
             const rec = pending.find(p => p.catSection === e.target);
             if (rec) { fillCategory(rec.catSection, rec.category); io.unobserve(e.target); }
           }
         });
-      }, { rootMargin: '800px 0px' });
+      }, { rootMargin: '1500px 0px' });
       pending.forEach(p => io.observe(p.catSection));
     } else {
       pending.forEach(p => fillCategory(p.catSection, p.category));
@@ -234,6 +249,51 @@ document.addEventListener('DOMContentLoaded', () => {
     // Ilk 2 kategoriyi hemen doldur (sayfa acilir acilmaz bos gorunmesin)
     if (pending[0]) fillCategory(pending[0].catSection, pending[0].category);
     if (pending[1]) fillCategory(pending[1].catSection, pending[1].category);
+
+    // ================= PENCERELI RENDER (IS1 + MOBIL COKME BIRLIKTE COZULUR) =================
+    // GECMIS (iki uc nokta da hataliydi):
+    //  (a) Hepsini birden cizmek -> 415 kart / ~68.000px sayfa. Her kartta backdrop-filter (cam efekti)
+    //      var; bu GPU'da cok pahali. AI'in "bolume git"/"kartini ac" butonuna dokununca uzak bir
+    //      noktaya (orn. y=62.000) atlayinca Safari o bolgeyi bir anda kompozit etmek zorunda kaliyor
+    //      -> WebKit surecinin cokup sekmeyi yeniden yuklemesi ("sayfa yenilendi" / "atti").
+    //      NOT: Bu, IS1 icin ekledigim "garanti doldurucu"nun yan etkisiydi (kendi notum satir 140'ta
+    //      zaten bu riski yaziyordu; doldurucu onu geri getirdi).
+    //  (b) Hic doldurmamak -> observer tetiklenmezse kategoriler bos kaliyordu (IS1 sikayeti).
+    // COZUM: EKRANA YAKIN kategoriler DOLU, UZAKTAKILER BOSALTILIR. DOM her zaman kucuk kalir
+    // (bellek/GPU guvenli) AMA misafir nereye atlarsa atlasin dolu icerik gorur (observer'a bagimli degil).
+    // Bosaltirken OLCULEN GERCEK yukseklik minHeight olarak sabitlenir -> sayfa asla ziplamaz.
+    const YAKIN = 2500;   // bu mesafedekiler dolu olsun
+    const UZAK  = 8000;   // bundan uzaktakiler bosaltilsin (YAKIN<UZAK = histerezis -> dolup-bosalma gidip gelmesi yok)
+    // FIX (2026-07-14, Fable): AI "kartini ac" hedefinin kategorisi, kullanici oraya atlarken
+    // unfill tarafindan BOSALTILMASIN (kart DOM'dan silinip "karta goturmedi" oluyordu).
+    let _pinliSection = null, _pinliZaman = 0;
+    window.raiPinCategory = function (sec) { _pinliSection = sec || null; _pinliZaman = Date.now(); };
+    function unfillCategory(catSection) {
+      if (_pinliSection === catSection && (Date.now() - _pinliZaman) < 15000) return;
+      if (!catSection.dataset.filled) return;
+      const h = catSection.offsetHeight;              // GERCEK yukseklik -> geometri korunur, zipreme yok
+      catSection.style.minHeight = h + 'px';
+      while (catSection.firstChild) catSection.removeChild(catSection.firstChild);
+      delete catSection.dataset.filled;
+      if (io) { try { io.observe(catSection); } catch (e) {} }
+    }
+    function ensureWindow() {
+      const vTop = window.scrollY, vBot = vTop + window.innerHeight;
+      pending.forEach(p => {
+        const s = p.catSection, top = s.offsetTop, bot = top + s.offsetHeight;
+        const mesafe = (bot < vTop) ? (vTop - bot) : ((top > vBot) ? (top - vBot) : 0);
+        if (mesafe <= YAKIN) { try { fillCategory(s, p.category); } catch (e) {} }
+        else if (mesafe >= UZAK) { try { unfillCategory(s); } catch (e) {} }
+      });
+    }
+    let _tick = false;
+    window.addEventListener('scroll', function () {
+      if (_tick) return; _tick = true;
+      requestAnimationFrame(function () { _tick = false; ensureWindow(); });
+    }, { passive: true });
+    setTimeout(ensureWindow, 300);
+    // AI "bolume git" gibi programatik atlamalar sonrasi da pencere tazelensin (scroll olayi gec kalabilir)
+    window.__raiEnsureWindow = ensureWindow;
 
     // AI [[SHOW:Urun]] icin: SADECE o urunun kategorisini doldur (413 kartin HEPSINI birden cizmek
     // dusuk-bellekli iPhone'da sekmeyi cokertiyordu -> "isterim/gin severim" sonrasi sayfa yenileniyordu).

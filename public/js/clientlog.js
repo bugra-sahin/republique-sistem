@@ -76,6 +76,32 @@
       send({ tip: 'reload', mesaj: WIN / 1000 + ' sn icinde ' + arr.length + ' kez yuklendi (' + (navType || 'nav') + ') — surekli yenilenme/cokme dongusu' });
       try { sessionStorage.setItem(KEY, '[]'); } catch (e) {} // ayni dongu icin tek log
     }
+
+    // ---- 4b) TEK SEFERLIK COKME/YENILENME (KOR NOKTA KAPATILDI) ----
+    // Onceki hali SADECE 3+ dongude log atiyordu. Safari sekmeyi bellek/GPU baskisiyla oldurup
+    // TEK SEFER yeniden yukledigi durumda (Bugra'nin 'sayfa yenilendi'/'atti' sikayeti) HIC KAYIT
+    // DUSMUYORDU -> teshis edilemiyordu. Artik her beklenmedik yeniden-yukleme tek basina raporlanir.
+    // Sayfada ne kadar kalindigi ipucu verir: cok kisa sure + reload = cokme; uzun sure = muhtemelen kullanici.
+    if (navType === 'reload') {
+      var onceki = 0, gecen = -1;
+      try { onceki = parseInt(sessionStorage.getItem('rai_son_yukleme') || '0', 10) || 0; } catch (e) {}
+      if (onceki) gecen = Math.round((now - onceki) / 1000);
+      var bellek = '';
+      try {
+        if (navigator.deviceMemory) bellek = ', cihaz RAM ~' + navigator.deviceMemory + 'GB';
+        if (performance.memory) bellek += ', JS bellek ' + Math.round(performance.memory.usedJSHeapSize / 1048576) + 'MB';
+      } catch (e) {}
+      var gizli = '';
+      try { gizli = (!('serviceWorker' in navigator) || !window.caches) ? ', GIZLI SEKME olabilir (SW/cache yok)' : ''; } catch (e) {}
+      send({
+        tip: 'reload',
+        mesaj: 'sayfa beklenmedik sekilde YENIDEN YUKLENDI (muhtemel sekme cokmesi). Onceki yuklemeden bu yana: ' +
+               (gecen >= 0 ? gecen + ' sn' : 'bilinmiyor') + ', sayfa yuksekligi ' +
+               (document.documentElement ? document.documentElement.scrollHeight : '?') + 'px' + bellek + gizli,
+        kaynak: location.pathname
+      });
+    }
+    try { sessionStorage.setItem('rai_son_yukleme', String(now)); } catch (e) {}
   } catch (e) {}
 
   // ---- 5) RAGE-CLICK: ~1sn icinde ayni noktaya 3+ tiklama = ofke/tepkisizlik ----

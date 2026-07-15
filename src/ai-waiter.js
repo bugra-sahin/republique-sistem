@@ -234,7 +234,7 @@ async function chatWithWaiter({ message, repId, ip, history, table }) {
     return { reply: 'Buyurun, menuyle ilgili ne sormak istersiniz?', ok: true };
   }
   if (message.length > MAX_INPUT_CHARS) {
-    return { reply: 'Mesajiniz biraz uzun olmus, kisaca tekrar yazar misiniz? 😊', ok: true };
+    return { reply: 'Mesajiniz biraz uzun olmus, kisaca tekrar yazar misiniz?', ok: true };
   }
   if (rateLimited(key)) {
     return { reply: 'Cok hizli yaziyorsunuz, birazdan tekrar deneyin lutfen.', ok: true };
@@ -242,20 +242,20 @@ async function chatWithWaiter({ message, repId, ip, history, table }) {
 
   // MASA KAPISI: Republique AI yalnizca masada (QR okutan) misafirlere hizmet verir
   if (!table || table === 'Bilinmiyor' || table === 'undefined' || !String(table).trim()) {
-    return { ok: true, notable: true, reply: 'Republique AI, masanizdaki karekodu okuttugunuzda hizmetinizdedir 😊 Menuyu masanizdan acarsaniz size ozel oneriler sunabilirim.' };
+    return { ok: true, notable: true, reply: 'Republique AI, masanizdaki karekodu okuttugunuzda hizmetinizdedir. Menuyu masanizdan acarsaniz size ozel oneriler sunabilirim.' };
   }
 
   const geminiKey = process.env.GEMINI_API_KEY;
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
   if (!geminiKey && !anthropicKey) {
-    return { reply: 'Republique AI su an hazirlaniyor, birazdan yaninizda olacak. Bu arada garsonumuz size yardimci olabilir. 🍸', ok: true, disabled: true };
+    return { reply: 'Republique AI su an hazirlaniyor, birazdan yaninizda olacak. Bu arada garsonumuz size yardimci olabilir.', ok: true, disabled: true };
   }
 
   // GLOBAL KOTA/SIRA: dakikalik saglayici siniri dolduysa misafiri siraya al
   const slot = providerSlot();
   if (!slot.ok) {
     return { ok: true, queued: true, waitSeconds: slot.waitSeconds,
-      reply: `Republique AI su an diger misafirlerimize hizmet veriyor. Sizin siraniza yaklasik ${slot.waitSeconds} saniye... 🍸` };
+      reply: `Republique AI su an diger misafirlerimize hizmet veriyor. Sizin siraniza yaklasik ${slot.waitSeconds} saniye...` };
   }
 
   const menuObj = getCachedMenu();
