@@ -60,6 +60,11 @@ db.query("ALTER TABLE scans ADD COLUMN IF NOT EXISTS tekrar_gelen BOOLEAN").catc
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// SIKISTIRMA (§76): sunucu HICBIR yaniti sikistirmiyordu -> OLCULDU: /api/menu 276 KB,
+// /menu 64 KB, app.js 16 KB HAM iniyordu. Misafirin mobil verisini yakiyor + acilisi yavaslatiyor.
+// gzip/deflate ile JSON ve HTML ~8-9 kat kuculur. En basta durmali ki TUM yanitlari kapsasin.
+// (Caddyfile'a "encode" eklemek de olurdu ama o CANLIYI aninda etkilerdi; burasi normal terfi akisinda.)
+app.use(require("compression")());
 app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
 
@@ -144,6 +149,30 @@ app.use("/api/admin", (req, res, next) => {
 
 app.use(express.static(path.join(__dirname, 'public')));
 
+// EKSIK URUN GORSELI -> 404 YERINE REPUBLIQUE LOGOLU YER TUTUCU (§71, Bugra'nin istegi).
+// Buraya DUSMEK demek: express.static dosyayi BULAMADI = gorsel yerel onbellekte yok.
+// Misafir kirik/bos resim gormesin diye, FOTOGRAFSIZ urunlerde kullanilan AYNI logo yer
+// tutucusu 200 ile servis edilir (public/js/app.js icindeki defaultImg ile BIREBIR AYNI SVG).
+// Istemcide zaten onerror yedegi var; bu sunucu tarafi yedek onu tamamlar ve BOSA GIDEN
+// 404 isteklerini bitirir (denetimdeki [ag-hata]/[js-hata] gurultusunun kaynagi buydu).
+// SORUNU GIZLEMESIN diye: her eksik dosya adi BIR KEZ log'a yazilir ->
+//   docker logs staging-app-staging-1  (arama: "gorsel-eksik")
+const EKSIK_GORSELLER = new Set();
+const YER_TUTUCU_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="90" height="90" fill="#0a1f16">'
+  + '<rect width="90" height="90" fill="#05100c"/>'
+  + '<text x="45" y="45" fill="#d4af37" font-size="12" font-family="sans-serif"'
+  + ' text-anchor="middle" alignment-baseline="middle">REPUBLIQUE</text></svg>';
+app.use('/images', (req, res, next) => {
+  if (!/\.(webp|jpg|jpeg|png)$/i.test(req.path)) return next();
+  if (!EKSIK_GORSELLER.has(req.path)) {
+    EKSIK_GORSELLER.add(req.path);
+    console.warn('[gorsel-eksik] yer tutucu servis edildi -> /images' + req.path);
+  }
+  res.set('Content-Type', 'image/svg+xml');
+  res.set('Cache-Control', 'public, max-age=300'); // kisa: gercek gorsel gelince hemen gorunsun
+  res.status(200).send(YER_TUTUCU_SVG);
+});
+
 const upload = multer({ storage: multer.memoryStorage() });
 
 app.get("/health", (req, res) => {
@@ -162,14 +191,135 @@ const VALID_TABLES = new Set();
   for (var i=r[0]; i<=r[1]; i++) VALID_TABLES.add(r[2]+'-'+i);
 });
 
+// ============ MENU SCHEMA — AI ASISTANLARI ICIN MAKINE-OKUR MENU (§76 GEO) ============
+// NEDEN: Bugra'nin hedefi "Ankara'da kokteyl/bira/viski/yemek soran herkesin konusmasinda gecelim".
+// GEO arastirmasi (2026): AI asistanlari OZGUN VERI + yapisal veri + fiyat/olgu iceren kaynaklari
+// belirgin sekilde daha cok ALINTILIYOR. Bizde 432 urunluk fiyatli menu VAR ama makine-okur
+// degildi: schema'da yalnizca "hasMenu": <link> vardi (ustelik eski Wix adresine).
+// ARTIK: schema.org/Menu -> MenuSection -> MenuItem (ad + aciklama + FIYAT/TRY) sunulur.
+// Kaynak: data/menu.json (menu cekicinin yazdigi onbellek). Dosya yoksa SESSIZCE atlanir.
+// Guvenlik/temizlik: personel & "Ekstra Istek" gibi servis kalemleri haric; stokta olmayan haric;
+// JSON icindeki "<" kacislanir (</script> ile HTML kirilmasin).
+let _menuLdCache = { v: null, t: 0 };
+function menuSchemaUret() {
+  try {
+    const fs = require("fs");
+    const p = path.join(__dirname, "data", "menu.json");
+    if (!fs.existsSync(p)) return "";
+    const ham = JSON.parse(fs.readFileSync(p, "utf8"));
+    let cats = (ham.result && ham.result.categories) || ham.categories || ham;
+    if (!Array.isArray(cats)) return "";
+    const SAHTE = /personel|ekstra\s*istek/i;
+    const bolumler = [];
+    for (const c of cats) {
+      if (!c || c.isVisible === false || SAHTE.test(c.name || "")) continue;
+      const kalemler = [];
+      for (const sec of (c.sections || [])) {
+        if (SAHTE.test(sec.name || "")) continue;
+        for (const u of (sec.products || [])) {
+          if (!u || u.inStock === false || SAHTE.test(u.name || "")) continue;
+          const k = { "@type": "MenuItem", "name": String(u.name || "").trim().slice(0, 120) };
+          if (!k.name) continue;
+          if (u.description) k.description = String(u.description).trim().slice(0, 300);
+          const fi = Number(u.price);
+          if (fi > 0) k.offers = { "@type": "Offer", "price": fi, "priceCurrency": "TRY" };
+          kalemler.push(k);
+        }
+      }
+      if (kalemler.length) bolumler.push({ "@type": "MenuSection", "name": String(c.name || "").trim(), "hasMenuItem": kalemler });
+    }
+    if (!bolumler.length) return "";
+    const ld = JSON.stringify({
+      "@context": "https://schema.org", "@type": "Menu",
+      "name": "Republique Tunalı — Menü", "inLanguage": "tr-TR",
+      "hasMenuSection": bolumler
+    }).replace(/</g, "\\u003c");
+    return '<script type="application/ld+json">' + ld + '</script>';
+  } catch (e) { console.error("menuSchemaUret:", e.message); return ""; }
+}
+function menuSchemaAl() {
+  const now = Date.now();
+  if (_menuLdCache.v !== null && now - _menuLdCache.t < 300000) return _menuLdCache.v;
+  _menuLdCache = { v: menuSchemaUret(), t: now };
+  return _menuLdCache.v;
+}
+// index.html'i menu schema'si ENJEKTE EDEREK gonderir. Hata olursa duz dosyaya duser (misafir etkilenmez).
+// ---- FAQPage (§77 GEO) — "Ankara'da kokteyl bar nerede / kac lira / kacta aciliyor" gibi
+// GERCEK sorulara GERCEK verimizle cevap. Arastirma: SSS, AI asistanlarinin en cok alintiladigi format.
+// KURAL: fiyatlar data/menu.json'dan HESAPLANIR. Menu yoksa o soru HIC EKLENMEZ -> asla uydurma cevap.
+let _faqCache = { v: null, t: 0 };
+function _fiyatAraligi(kalip) {
+  try {
+    const fs = require("fs");
+    const p = path.join(__dirname, "data", "menu.json");
+    if (!fs.existsSync(p)) return null;
+    const ham = JSON.parse(fs.readFileSync(p, "utf8"));
+    let cats = (ham.result && ham.result.categories) || ham.categories || ham;
+    if (!Array.isArray(cats)) return null;
+    const c = cats.find(function (x) { return x && new RegExp(kalip, "i").test(x.name || ""); });
+    if (!c) return null;
+    const f = [];
+    for (const sec of (c.sections || [])) for (const u of (sec.products || [])) {
+      const n = Number(u.price);
+      if (n > 0 && u.inStock !== false && !/personel|ekstra\s*istek/i.test(u.name || "")) f.push(n);
+    }
+    if (!f.length) return null;
+    return { min: Math.min.apply(null, f), max: Math.max.apply(null, f), adet: f.length };
+  } catch (e) { return null; }
+}
+function faqSchemaUret() {
+  try {
+    const q = [];
+    const ekle = function (soru, cevap) {
+      q.push({ "@type": "Question", "name": soru, "acceptedAnswer": { "@type": "Answer", "text": cevap } });
+    };
+    ekle("Republique Tunalı nerede?",
+      "Republique Tunalı, Ankara'da Çankaya ilçesinde, Remzi Oğuz Arık Mahallesi Bestekar Caddesi No 65/B adresindedir (Tunalı Hilmi çevresi). Telefon: 0552 656 51 59.");
+    ekle("Republique Tunalı kaçta açılıyor, çalışma saatleri nedir?",
+      "Republique Tunalı her gün 12:00 ile 01:00 saatleri arasında açıktır.");
+    ekle("Republique Tunalı nasıl bir mekan?",
+      "Ankara Tunalı'da kokteyl bar ve social house konseptinde bir mekandır: imza kokteyller, geniş viski ve içecek seçkisi ile yemek menüsü bir arada sunulur.");
+    const kok = _fiyatAraligi("kokteyl");
+    if (kok) ekle("Republique Tunalı'da kokteyl fiyatları ne kadar?",
+      "Kokteyl menüsünde " + kok.adet + " seçenek vardır; fiyatlar " + kok.min + " TL ile " + kok.max + " TL arasında değişir. Güncel menü site üzerinden görülebilir.");
+    const vis = _fiyatAraligi("viski");
+    if (vis) ekle("Republique Tunalı'da viski çeşitleri ve fiyatları nedir?",
+      "Viski menüsünde " + vis.adet + " seçenek bulunur; fiyatlar " + vis.min + " TL ile " + vis.max + " TL arasındadır.");
+    const yem = _fiyatAraligi("yiyecek");
+    if (yem) ekle("Republique Tunalı'da yemek var mı?",
+      "Evet. Yiyecek menüsünde " + yem.adet + " seçenek vardır; fiyatlar " + yem.min + " TL ile " + yem.max + " TL arasındadır. Burger ve pizza gibi seçeneklerin yanı sıra farklı tabaklar bulunur.");
+    if (!q.length) return "";
+    return '<script type="application/ld+json">' +
+      JSON.stringify({ "@context": "https://schema.org", "@type": "FAQPage", "inLanguage": "tr-TR", "mainEntity": q })
+        .replace(/</g, "\\u003c") + '</script>';
+  } catch (e) { console.error("faqSchemaUret:", e.message); return ""; }
+}
+function faqSchemaAl() {
+  const now = Date.now();
+  if (_faqCache.v !== null && now - _faqCache.t < 300000) return _faqCache.v;
+  _faqCache = { v: faqSchemaUret(), t: now };
+  return _faqCache.v;
+}
+
+function menuSayfasiGonder(res) {
+  const dosya = path.join(__dirname, "public", "index.html");
+  try {
+    const fs = require("fs");
+    let html = fs.readFileSync(dosya, "utf8");
+    const ld = menuSchemaAl() + faqSchemaAl();
+    if (ld && html.includes("</head>")) html = html.replace("</head>", ld + "</head>");
+    return res.type("html").send(html);
+  } catch (e) { return res.sendFile(dosya); }
+}
+
 app.get("/menu", (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  menuSayfasiGonder(res);
 });
 
 app.get("/menu/:table", (req, res) => {
   const _t = String(req.params.table || "").toUpperCase().trim();
   if (!VALID_TABLES.has(_t)) return res.redirect("/menu");
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  menuSayfasiGonder(res);
 });
 
 // Blog (SEO/GEO icerik) — temiz URL'ler. Dosyalar public/blog/ altinda.
@@ -217,7 +367,33 @@ app.get("/blog/:slug", (req, res) => {
         + 'Republique Tunalı · Bestekar Cd 65/B, Çankaya/Ankara · '
         + '<a href="https://share.google/rJCHpjDGK456xl63a" target="_blank" rel="noopener">Google Maps\'te yol tarifi</a> · '
         + '<a href="/menu">Menüyü aç</a> · <a href="/blog">Tüm yazılar</a></div>';
-      if (html.includes("</head>")) html = html.replace("</head>", '<link rel="stylesheet" href="/blog/blog.css">' + rest + '</head>');
+      // 2b) TWITTER/X KARTI (§75 SEO denetimi: 19/19 makalede EKSIKTI - acik kaynak
+      //     maddevs/seo-analyzer "metaSocialRule" ile tespit edildi). Baslik/aciklama/gorsel
+      //     makalenin KENDISINDEN okunur; yoksa makul varsayilana duser. og: etiketleri zaten vardi.
+      const nitelikKacis = (x) => String(x || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+      const bloBaslik = (html.match(/<title[^>]*>([^<]*)<\/title>/i) || [, "Republique Tunalı"])[1].trim();
+      const bloAciklama = (html.match(/<meta\s+name=["']description["']\s+content=["']([^"']*)["']/i) || [, ""])[1].trim();
+      const bloGorsel = (html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']*)["']/i) || [, "https://republique.tr/logo.png"])[1];
+      const twitter = '<meta name="twitter:card" content="summary_large_image">'
+        + '<meta name="twitter:title" content="' + nitelikKacis(bloBaslik) + '">'
+        + (bloAciklama ? '<meta name="twitter:description" content="' + nitelikKacis(bloAciklama) + '">' : '')
+        + '<meta name="twitter:image" content="' + nitelikKacis(bloGorsel) + '">';
+      // 2c) ARTICLE SCHEMA (§77 GEO): tazelik + otorite sinyali. AI motorlari guncelligi olcuyor;
+      //     tarihi/yazari olmayan icerik geriliyor. Tarih: dosyanin GERCEK degisim zamani (uydurma yok).
+      let bloTarih = new Date().toISOString();
+      try { bloTarih = fs.statSync(f).mtime.toISOString(); } catch (e2) {}
+      const makale = '<script type="application/ld+json">' + JSON.stringify({
+        "@context": "https://schema.org", "@type": "BlogPosting",
+        "headline": bloBaslik.slice(0, 110),
+        "description": bloAciklama || undefined,
+        "inLanguage": "tr-TR",
+        "datePublished": bloTarih, "dateModified": bloTarih,
+        "author": { "@type": "Organization", "name": "Republique Tunalı" },
+        "publisher": { "@type": "Organization", "name": "Republique Tunalı",
+          "logo": { "@type": "ImageObject", "url": "https://republique.tr/logo.png" } },
+        "mainEntityOfPage": { "@type": "WebPage", "@id": "https://republique.tr/blog/" + curSlug }
+      }).replace(/</g, "\\u003c") + '</script>';
+      if (html.includes("</head>")) html = html.replace("</head>", '<link rel="stylesheet" href="/blog/blog.css">' + rest + twitter + makale + '</head>');
       if (/<body[^>]*>/.test(html)) html = html.replace(/<body[^>]*>/, (m) => m + bar);
       else html = bar + html;
       if (html.includes("</body>")) html = html.replace("</body>", foot + "</body>");

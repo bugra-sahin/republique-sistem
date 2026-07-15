@@ -88,7 +88,8 @@ body {
   border: 1px solid rgba(204, 119, 34, 0.4);
   color: var(--color-gold-light);
   padding: 8px 14px;
-  border-radius: 20px;
+  min-height: 44px;     /* denetim bulgusu #3: 36px idi -> dokunma hedefi 44px */
+  border-radius: 22px;  /* 20 -> 22: 44px yukseklikte tam hap (pill) gorunumu korunur */
   display: flex;
   align-items: center;
   gap: 6px;
@@ -114,7 +115,12 @@ body {
   display: flex;
   overflow-x: auto;
   gap: 15px;
-  padding: 15px 20px;
+  /* DOKUNMA HEDEFI FIX (2026-07-15, otomatik denetim bulgusu #3):
+     Kategori butonlari 31px yuksekligindeydi; Apple >=44px onerir (admin "Hatalar"da
+     "olu tiklama" kayitlari vardi = parmak iskaliyor). Cozum SERIDIN YUKSEKLIGINI DEGISTIRMEZ:
+     serit dolgusu 15px -> 8px azaltilirken buton dolgusu 5px -> 12px artirildi (net 0).
+     Boylece gorunum AYNI kalir, dokunulabilir alan 31px -> 45px olur. */
+  padding: 8px 20px;
   background: rgba(5, 16, 12, 0.85);
   backdrop-filter: blur(15px);
   -webkit-backdrop-filter: blur(15px);
@@ -132,7 +138,8 @@ body {
   font-size: 1.05rem;
   font-weight: 600;
   white-space: nowrap;
-  padding: 5px 0;
+  padding: 12px 0;      /* 5px -> 12px: dokunma hedefi 31px -> 45px (serit dolgusu ayni kadar azaldi) */
+  min-height: 44px;     /* garanti: yazi tipi degisse bile hedef 44px'in altina DUSMESIN */
   cursor: pointer;
   position: relative;
   transition: color 0.3s ease;
@@ -143,7 +150,9 @@ body {
 .cat-btn.active::after {
   content: '';
   position: absolute;
-  bottom: -15px;
+  /* -15px -> -8px: buton 7px daha uzun, serit dolgusu 7px daha kisa oldugu icin alt cizgi
+     TAM OLARAK eskisi gibi seridin alt kenarina oturur (piksel farki yok). */
+  bottom: -8px;
   left: 0;
   width: 100%;
   height: 2px;
@@ -195,6 +204,11 @@ body {
 }
 .product-info {
   flex-grow: 1;
+  /* TASMA FIX (2026-07-15, denetim bulgusu #4): Flex cocuklarinin varsayilan min-width'i 'auto'dur
+     -> icerik daralamayinca kart DISINA tasar. iPhone SE'de (320px) uzun isimli kartlarda
+     product-info 245px oluyordu (sigmasi gereken ~145px) -> yazi ekran kenarindan KESILIYORDU.
+     min-width:0 flex'in daraltmasina izin verir. OLCULDU: tasan oge sayisi 8 -> 0. */
+  min-width: 0;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -204,6 +218,7 @@ body {
   font-weight: 600;
   color: var(--color-text-main);
   margin-bottom: 4px;
+  overflow-wrap: anywhere;  /* uzun/bosluksuz urun adi kutudan tasmasin */
 }
 .product-desc {
   font-size: 0.8rem;
@@ -221,6 +236,34 @@ body {
   color: var(--color-amber); /* Fiyatlarda amber tonu iştah açıcı */
   font-weight: 600;
   margin-top: auto;
+  overflow-wrap: anywhere;
+}
+
+/* DAR EKRAN (iPhone SE / 320px) - YATAY TASMA FIX (2026-07-15, denetim bulgusu #4)
+   OLCUM: baslikta 277px yer var ama marka (181px) + AI butonu (121px) = 302px gerekiyordu
+   -> AI butonu ekranin 11px disina tasiyordu (sayfa saga-sola kayiyordu).
+   Cozum: SADECE <=360px'te markayi bir tik kucult + baslik dolgusunu azalt + AI butonu ezilmesin.
+   Normal telefonlarda (iPhone 12 = 390px) HICBIR SEY DEGISMEZ.
+   OLCULDU (320px): tasma 11px -> 0px, kalan tasan oge YOK. */
+@media (max-width: 360px) {
+  .top-header {
+    padding-left: 14px;
+    padding-right: 14px;
+    gap: 10px;
+  }
+  .brand .logo {
+    font-size: 1.3rem;
+    letter-spacing: 1px;
+  }
+  .brand .subtitle {
+    font-size: 0.62rem;
+    letter-spacing: 0.5px;
+  }
+  .ai-btn {
+    flex-shrink: 0;   /* buton ezilmesin; yer marka tarafindan acilir */
+    padding-left: 10px;
+    padding-right: 10px;
+  }
 }
 
 /* Yükleniyor Durumu */
