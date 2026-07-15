@@ -23,6 +23,14 @@ gercek iPhone turu yine de gerekir (ayda 1-2, her gun degil).
      ICINDEKI BIR BOLUM. Simdi: kategori+bolum+urun adlarinda regex eleme + dongu dogru kirilir.
  (3) [tasma] Artik sadece "tasma var" demiyor, TASIRAN OGEYI de bildiriyor (yatay kaydirmasi
      olan konteynerlerin icindekiler haric tutulur - onlarin tasmasi normaldir).
+
+--- SURUM 3 (2026-07-15 gece): DENETIMIN KENDI YANLIS ALARMLARI TEMIZLENDI (§69-E) ---
+ (1) [dokunma-hedefi] .cat-btn'de GENISLIK kurali kaldirildi -> sadece YUKSEKLIK. Sebep: yatay
+     sekme seridinde "Viski" gibi kisa ad dogal olarak dar (37px); bu hata degil. (E-2)
+ (2) [ag-hata] YENI KONTROL: page.on('response') ile 400+ donen ADRESLER kaydedilir. Chrome'un
+     adressiz "404 ()" konsol mesaji artik adresiyle raporlanir. (E-3)
+ (3) [tasma] position:fixed ogeler (glow-1/2/3 gibi dekoratif isiklar) artik SUCLANMIYOR -
+     belge akisinin disindalar, sayfa tasmasi yaratmazlar = yanlis pozitifti. (E-4)
 */
 const { chromium, devices } = require('playwright');
 const fs = require('fs'); const path = require('path');
@@ -50,6 +58,11 @@ async function denetle(browser, hedef) {
   const jsHata = [];
   page.on('console', m => { if (m.type() === 'error') jsHata.push(m.text()); });
   page.on('pageerror', e => jsHata.push('pageerror: ' + e.message));
+  // SURUM 3 (§69-E-3): Chrome konsolu "404 ()" derken ADRESI YAZMIYOR -> hangi dosyanin eksik
+  // oldugunu ogrenemiyorduk. Cozum: yanitlari dogrudan dinle, 400+ donen HER adresi kaydet.
+  const agHata = [];
+  page.on('response', r => { if (r.status() >= 400) agHata.push(r.status() + ' ' + r.url()); });
+  page.on('requestfailed', r => { const f = r.failure(); agHata.push('BASARISIZ(' + (f ? f.errorText : '?') + ') ' + r.url()); });
 
   // 1) MENU ACILIYOR MU
   try { await page.goto(MENU, { waitUntil: 'networkidle', timeout: 45000 }); }
@@ -86,6 +99,9 @@ async function denetle(browser, hedef) {
       if (r.width === 0 || r.height === 0) continue;
       if (r.right <= iw + 1 && r.left >= -1) continue;
       if (kaydirilabilirIcinde(el)) continue;
+      // §69-E-4: position:fixed ogeler (glow-1/2/3 gibi dekoratif isiklar) belge akisinin DISINDA
+      // durur -> sayfa tasmasi YARATMAZ. Bunlari suclamak YANLIS POZITIF ve yanlis yonlendirir.
+      if (getComputedStyle(el).position === 'fixed') continue;
       suclu.push({ oge: ad(el), sol: Math.round(r.left), sag: Math.round(r.right), gen: Math.round(r.width) });
     }
     suclu.sort((a, b) => b.sag - a.sag);
@@ -205,7 +221,14 @@ async function denetle(browser, hedef) {
 
   // 9) DOKUNMA HEDEFI >= 40px (Apple 44px onerir; 40 esigi ile uyariyoruz)
   const kucuk = await page.evaluate(() => [...document.querySelectorAll('button, .cat-btn, .rai-send, .rai-close, .pd-close')]
-    .filter(b => { const r = b.getBoundingClientRect(); return r.width > 0 && (r.height < 40 || r.width < 40); })
+    .filter(b => {
+      // §69-E-2: YATAY sekme seridindeki .cat-btn icin GENISLIK kurali ANLAMSIZ. "Viski" gibi kisa
+      // bir kategori adi dogal olarak dar olur (37px) ve bu bir hata DEGILDIR. Sadece YUKSEKLIGE bak.
+      const r = b.getBoundingClientRect();
+      if (!(r.width > 0 && r.height > 0)) return false;
+      if (b.classList.contains('cat-btn')) return r.height < 40;
+      return r.height < 40 || r.width < 40;
+    })
     .map(b => (b.className || b.tagName) + ' ' + Math.round(b.getBoundingClientRect().width) + 'x' + Math.round(b.getBoundingClientRect().height)).slice(0, 6));
   if (kucuk.length) BAD(hedef.name, 'dokunma-hedefi', 'kucuk hedefler: ' + kucuk.join(' | '));
   else OK('dokunma-hedefi');
@@ -251,6 +274,15 @@ async function denetle(browser, hedef) {
   // 13) JS HATALARI
   if (jsHata.length) jsHata.slice(0, 8).forEach(m => BAD(hedef.name, 'js-hata', m.slice(0, 180)));
   else OK('js-hata', 'konsol temiz');
+
+  // 14) AG HATALARI - 400+ donen ADRESLER (§69-E-3). Konsoldaki adressiz "404 ()" mesajlarinin
+  //     karsiligi burada ADRESIYLE gorunur. Ayni adres tekrar ediyorsa tek satirda sayilir.
+  if (agHata.length) {
+    const sayac = {};
+    agHata.forEach(a => { sayac[a] = (sayac[a] || 0) + 1; });
+    Object.entries(sayac).sort((a, b) => b[1] - a[1]).slice(0, 10)
+      .forEach(([adres, adet]) => BAD(hedef.name, 'ag-hata', adres + (adet > 1 ? ' (x' + adet + ')' : '')));
+  } else OK('ag-hata', 'tum istekler 2xx/3xx');
 
   try { fs.mkdirSync(OUT, { recursive: true }); await page.screenshot({ path: path.join(OUT, hedef.name + '.png') }); } catch (e) {}
   await ctx.close();
