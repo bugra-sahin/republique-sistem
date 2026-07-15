@@ -24,6 +24,11 @@ services:
     volumes:
       - llmsecrets:/secrets
       - stagingmenudata:/app/data
+      # §81: denetim raporunu HTTP ile okunur yap. Sebep: Hetzner konsoluna ":" YAZILAMIYOR
+      # (ENTER gibi davraniyor) ve uzun ciktilar konsolda geriye kaydirilamiyor.
+      # Artik sonuc: https://test2.republique.tr/denetim/son-kosum.txt  (tek HTTP istegi)
+      # ro = salt okunur; uygulama bu klasore YAZAMAZ.
+      - ./tests/report:/app/public/denetim:ro
 
   erp-staging:
     build: ./erp
