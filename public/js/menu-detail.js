@@ -71,7 +71,18 @@
       requestAnimationFrame(function(){requestAnimationFrame(function(){
         try{
           var deneme=0;
+          // FIX (2026-07-15, §80-B): WEBKIT STALE LAYOUT.
+          //   KANIT: teshis scriptinde her cagrinin ONCESINDE/SONRASINDA getBoundingClientRect
+          //   okundugu icin test GECIYORDU; okumalar KALKINCA denetimde HATA veriyordu.
+          //   Yani olcumun kendisi hatayi GIZLEMIYOR, DUZELTIYORDU. Sebep: getBoundingClientRect
+          //   okumak tarayiciyi SENKRON reflow'a zorlar. raiFillForProduct/openCard/raiPinCategory ve
+          //   __raiEnsureWindow DOM'u degistirir -> layout KIRLI kalir. WebKit kirli layout'ta
+          //   scrollIntoView'i ESKI (bayat) geometriyle hesaplayip yanlis yere kaydirir.
+          //   Chromium layout'u kendisi flush ettigi icin orada hic gorulmedi.
+          // COZUM: her kaydirmadan ONCE layout'u ZORLA hesaplat.
+          var zorla=function(){ try{ return card.getBoundingClientRect().top; }catch(e){ return 0; } };
           var git=function(){
+            zorla();
             try{ card.scrollIntoView({block:'center', inline:'nearest'}); }catch(e){
               var r=card.getBoundingClientRect();
               window.scrollTo(0,Math.max(0,r.top+window.pageYOffset-Math.max(0,(window.innerHeight-r.height)/2)));
@@ -84,6 +95,7 @@
             //   layout'u degistir' yanlis siraydi; kart kaydirildigi yerde KALMIYORDU.
             // COZUM: pencere tazelendikten SONRA TEKRAR kaydir -> git()'in SON isi DAIMA kaydirma,
             //   layout degisimi DEGIL. Boylece kaydirmadan sonra layout artik oynamaz.
+            zorla();
             try{ card.scrollIntoView({block:'center', inline:'nearest'}); }catch(e){}
           };
           var dogrula=function(){
