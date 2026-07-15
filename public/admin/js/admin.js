@@ -611,3 +611,116 @@ document.addEventListener('DOMContentLoaded', () => {
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', openFromHash); else openFromHash();
   window.addEventListener('hashchange', openFromHash);
 })();
+
+/* ============================================================================
+   §82 — "ADISYON YUKLE" KABLOLAMASI  (2026-07-16)
+
+   NEDEN VAR: Bu kutu DEKORATIFTI. #fileInput'un HICBIR olay dinleyicisi yoktu;
+   dosya secilince ekranda adi gorunuyor ama HICBIR ISTEK GITMIYORDU.
+   KANIT (olculdu): inp.onchange === null · HTML'de onchange=/ondrop= YOK ·
+   admin.js'te 0 FormData / 0 fileInput · `upload-pos` SADECE server.js'te geciyordu.
+   >>> Projenin ANA amaci (adisyon -> eslestirme -> CAPI) bu yuzden HIC calismadi.
+   Arka uc HAZIRDI: POST /api/admin/upload-pos  (multipart, alan adi: pos_file)
+   Bu blok o eksik kabloyu baglar. (§74-C'deki "QR Okut" hatasinin AYNISI.)
+   ============================================================================ */
+(function () {
+  function hazir(fn) {
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", fn);
+    else fn();
+  }
+  hazir(function () {
+    var alan  = document.getElementById("uploadArea");
+    var girdi = document.getElementById("fileInput");
+    var durum = document.getElementById("uploadStatus");
+    var mesaj = document.getElementById("uploadMessage");
+    if (!alan || !girdi) return;            // sayfa degistiyse sessizce cik
+    if (alan.dataset.bagli === "1") return; // iki kez baglanma
+    alan.dataset.bagli = "1";
+
+    function yaz(html) {
+      if (mesaj) mesaj.innerHTML = html;
+      if (durum) durum.style.display = "block";
+    }
+    function tl(n) { return (Number(n) || 0).toLocaleString("tr-TR") + " TL"; }
+    function kacis(s) {
+      return String(s == null ? "-" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    function raporCiz(rp) {
+      if (!rp) { yaz("<b>Sunucudan bos yanit geldi.</b>"); return; }
+      var m = rp.matches || [];
+      var html = "<h3>Eslestirme Sonucu</h3>";
+      html += "<p><b>" + m.length + "</b> adisyon, QR okutmasiyla eslesti.</p>";
+      html += "<ul>";
+      html += "<li>Reklamdan gelen toplam ciro: <b>" + tl(rp.totalAdRevenue) + "</b></li>";
+      html += "<li>Yeni musteri: " + tl(rp.newCustomerRevenue) + "</li>";
+      html += "<li>Tanidik (halo): " + tl(rp.haloRevenue) + "</li>";
+      html += "<li>Yeniden hedefleme: " + tl(rp.retargetRevenue) + "</li>";
+      html += "<li>Atfedilen: " + tl(rp.imputedRevenue) + " (" + (rp.imputedCount || 0) + " adet)</li>";
+      html += "<li>Kisi basi ortalama: " + tl(rp.avgPerCapita) + "</li>";
+      html += "</ul>";
+      // TESHIS (§82): 0 eslesme cikarsa SEBEBI burada gorunur - konsola girmeye gerek yok
+      var t = rp.tani;
+      if (t) {
+        html += "<p style='opacity:.8;font-size:13px'>Teshis: dosyada " + t.hamSatir + " ham satir, " +
+                t.gecerliAdisyon + " gecerli adisyon; son 30 gunde " + t.taramaSayisi + " tarama. " +
+                "Masasi hic taranmayan: " + t.masaHicYok + " · Zamani tutmayan: " + t.zamanTutmadi +
+                " (pencere " + kacis(t.pencere) + ")</p>";
+        if (t.ornekler && t.ornekler.length) {
+          html += "<details><summary>Neden eslesmedi? (ornekler)</summary><pre style='white-space:pre-wrap'>" +
+                  kacis(JSON.stringify(t.ornekler, null, 2)) + "</pre></details>";
+        }
+      }
+      if (m.length) {
+        html += "<table style='width:100%;margin-top:10px'><thead><tr><th>Masa</th><th>Acilis</th><th>Tutar</th><th>Tip</th></tr></thead><tbody>";
+        m.forEach(function (x) {
+          html += "<tr><td>" + kacis(x.masa) + "</td><td>" + kacis(x.time || x.openTime) +
+                  "</td><td>" + tl(x.total) + "</td><td>" + kacis(x.type || x.attribution) + "</td></tr>";
+        });
+        html += "</tbody></table>";
+      } else {
+        html += "<p><b>Hic eslesme yok.</b> Yukaridaki teshis satiri sebebini soyler.</p>";
+      }
+      yaz(html);
+    }
+
+    function gonder(dosya) {
+      if (!dosya) return;
+      yaz("<b>" + kacis(dosya.name) + "</b> yukleniyor ve eslestiriliyor...");
+      var fd = new FormData();
+      fd.append("pos_file", dosya, dosya.name);   // alan adi server.js ile AYNI olmali
+      fetch("/api/admin/upload-pos", { method: "POST", body: fd, credentials: "include" })
+        .then(function (r) {
+          return r.json().catch(function () { return null; }).then(function (j) {
+            if (!r.ok) { yaz("<b>Hata (" + r.status + "):</b> " + kacis((j && j.error) || "bilinmeyen")); return; }
+            raporCiz(j && j.report);
+          });
+        })
+        .catch(function (e) { yaz("<b>Baglanti hatasi:</b> " + kacis(e.message)); });
+    }
+
+    // 1) Kutuya tiklayinca dosya secici acilsin (girdinin KENDI tiklamasi haric -> sonsuz dongu olmasin)
+    alan.addEventListener("click", function (e) {
+      if (e.target === girdi) return;
+      girdi.click();
+    });
+
+    // 2) *** EKSIK OLAN BUYDU *** dosya secilince GONDER
+    girdi.addEventListener("change", function () {
+      gonder(girdi.files && girdi.files[0]);
+      girdi.value = "";   // ayni dosya tekrar secilebilsin
+    });
+
+    // 3) Suruklet-birak
+    ["dragenter", "dragover"].forEach(function (ev) {
+      alan.addEventListener(ev, function (e) { e.preventDefault(); e.stopPropagation(); alan.classList.add("dragover"); });
+    });
+    ["dragleave", "drop"].forEach(function (ev) {
+      alan.addEventListener(ev, function (e) { e.preventDefault(); e.stopPropagation(); alan.classList.remove("dragover"); });
+    });
+    alan.addEventListener("drop", function (e) {
+      var f = e.dataTransfer && e.dataTransfer.files;
+      if (f && f.length) gonder(f[0]);
+    });
+  });
+})();
