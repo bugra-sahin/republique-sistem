@@ -3,17 +3,26 @@
    AMAC (Bugra: 'hatalari ben bulmayayim, sistem bulsun'): her dagitimdan sonra otomatik kosar,
    uygulamanin ana ozelliklerini gercek bir telefon gibi dener, rapor uretir. Hata varsa exit!=0.
 
-   KURULUM (sunucuda bir kez):
-     cd /opt/republique-staging/tests
-     npm i -D playwright
-     npx playwright install --with-deps chromium
-   CALISTIR:
-     URL=https://test2.republique.tr MASA=b-9 node ux-audit.js
-     (AI sohbet testini de acmak icin: CHAT=1  -> GERCEK Anthropic cagrisi yapar, 1 mesaj.)
+CALISTIR (sunucuda):
+   cd /opt/republique-staging  &&  bash tests/run-audit.sh
+   (AI sohbet testini de acmak icin: CHAT=1 -> GERCEK Anthropic cagrisi, 1 mesaj.)
 
-   DURUST SINIR: Chromium emulasyonu ~ Safari DEGIL. Gercek iOS bellek baskisi/jetsam ve gercek
-   klavye burada YOK. Bu suit mantik/duzen/regresyon hatalarini yakalar; surum sonu kisa bir
-   gercek iPhone turu yine de gerekir (ayda 1-2, her gun degil).
+DURUST SINIR: Chromium emulasyonu ~ Safari DEGIL. Gercek iOS bellek baskisi/jetsam ve gercek
+klavye burada YOK. Bu suit mantik/duzen/regresyon hatalarini yakalar; surum sonu kisa bir
+gercek iPhone turu yine de gerekir (ayda 1-2, her gun degil).
+
+--- SURUM 2 (2026-07-15): ILK TURDAKI IKI YANLIS ALARM DUZELTILDI ---
+ (1) [kategori] Eskiden: bastan sona kaydir, SONDA tum bolumlere bak -> "cat-0..3 BOS" derdi.
+     Bu YANLIS ALARMDI: app.js pencereli render, 8000px'den UZAK kategorileri KASTEN bosaltir
+     (unfillCategory) ve yuksekligi minHeight ile korur. Yani sonda en usttekiler dogal olarak bos.
+     Simdi: her bolum TEK TEK goruse getirilir ve O AN dolu mu diye bakilir (IS1'in gercek sorusu).
+ (2) [ai-kart] Eskiden: son kategorinin ilk urununu secerdi -> "Ekstra 100 TL" (gercek urun degil,
+     servis kalemi) secip "modal acilmadi" derdi. IKI hata vardi: (a) ic dongudeki `break` sadece
+     IC dongudan cikiyordu -> aslinda SON BOLUMUN ilk urununu seciyordu; (b) eleme yalnizca
+     KATEGORI adina bakiyordu, oysa "Ekstra Istek" bir kategori degil, "Icecek" kategorisinin
+     ICINDEKI BIR BOLUM. Simdi: kategori+bolum+urun adlarinda regex eleme + dongu dogru kirilir.
+ (3) [tasma] Artik sadece "tasma var" demiyor, TASIRAN OGEYI de bildiriyor (yatay kaydirmasi
+     olan konteynerlerin icindekiler haric tutulur - onlarin tasmasi normaldir).
 */
 const { chromium, devices } = require('playwright');
 const fs = require('fs'); const path = require('path');
@@ -24,6 +33,10 @@ const CHAT = process.env.CHAT === '1';
 const OUT = path.join(__dirname, 'report');
 const MENU = BASE + '/menu/' + MASA;
 const MENU_MASASIZ = BASE + '/menu';
+
+// Gercek bir menu urunu OLMAYAN kalemler (servis/ekstra/personel). Hem kategori, hem bolum,
+// hem urun adinda aranir. Bunlarin karti olmayabilir -> teste sokma.
+const SAHTE_KALEM = /ekstra|personel|servis|kuver|bahsis|garson|paket\s*servis/i;
 
 const sorunlar = [];
 const gecen = [];
@@ -49,25 +62,68 @@ async function denetle(browser, hedef) {
   if (kart0 > 250) BAD(hedef.name, 'bellek', 'acilista ' + kart0 + ' kart DOM,da (>250) - iPhone cokme riski');
   else OK('bellek', 'acilista ' + kart0 + ' kart (pencereli render calisiyor)');
 
-  // 3) YATAY TASMA
-  const ov = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
-  if (ov.sw - ov.iw > 3) BAD(hedef.name, 'tasma', 'yatay tasma sw=' + ov.sw + ' iw=' + ov.iw); else OK('tasma');
+  // 3) YATAY TASMA (+ TASIRAN OGEYI BILDIR)
+  const ov = await page.evaluate(() => {
+    const iw = document.documentElement.clientWidth;
+    // Yatay kaydirmasi olan bir konteynerin ICINDE olan oge tasma sayilmaz (orn. kategori seridi).
+    const kaydirilabilirIcinde = el => {
+      for (let p = el.parentElement; p && p !== document.documentElement; p = p.parentElement) {
+        const ox = getComputedStyle(p).overflowX;
+        if (ox === 'auto' || ox === 'scroll' || ox === 'hidden') return true;
+      }
+      return false;
+    };
+    const ad = el => {
+      let s = el.tagName.toLowerCase();
+      if (el.id) s += '#' + el.id;
+      if (el.className && typeof el.className === 'string' && el.className.trim())
+        s += '.' + el.className.trim().split(/\s+/).slice(0, 3).join('.');
+      return s;
+    };
+    const suclu = [];
+    for (const el of document.querySelectorAll('body *')) {
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) continue;
+      if (r.right <= iw + 1 && r.left >= -1) continue;
+      if (kaydirilabilirIcinde(el)) continue;
+      suclu.push({ oge: ad(el), sol: Math.round(r.left), sag: Math.round(r.right), gen: Math.round(r.width) });
+    }
+    suclu.sort((a, b) => b.sag - a.sag);
+    return { sw: document.documentElement.scrollWidth, iw: window.innerWidth, suclu: suclu.slice(0, 8) };
+  });
+  if (ov.sw - ov.iw > 3) {
+    const detay = ov.suclu.length
+      ? ' | TASIRAN: ' + ov.suclu.map(s => s.oge + ' (sol=' + s.sol + ' sag=' + s.sag + ' gen=' + s.gen + ')').join(' ; ')
+      : ' | tasiran oge bulunamadi (govde/margin kaynakli olabilir)';
+    BAD(hedef.name, 'tasma', 'yatay tasma sw=' + ov.sw + ' iw=' + ov.iw + detay);
+  } else OK('tasma');
 
-  // 4) KAYDIRINCA TUM KATEGORILER DOLUYOR MU (IS1 regresyonu: 2/3 menu gorunmuyordu)
+  // 4) HER KATEGORI, GORUSE GELDIGINDE DOLUYOR MU (IS1 regresyonu: 2/3 menu gorunmuyordu)
+  //    NOT: Pencereli render UZAK kategorileri KASTEN bosaltir -> "sonda hepsine bakmak" YANLIS ALARM
+  //    uretir. Dogru soru: "misafir oraya kaydirdiginda dolu mu?"
   const kat = await page.locator('.cat-btn').count();
   if (kat < 2) BAD(hedef.name, 'kategori', 'kategori butonu yok/az: ' + kat);
   else {
-    await page.evaluate(async () => {
-      const adim = 600; const bekle = ms => new Promise(r => setTimeout(r, ms));
-      for (let y = 0; y < document.body.scrollHeight; y += adim) { window.scrollTo(0, y); await bekle(60); }
+    const bos = await page.evaluate(async () => {
+      const bekle = ms => new Promise(r => setTimeout(r, ms));
+      const sonuc = [];
+      const adet = document.querySelectorAll('.category-section').length;
+      for (let i = 0; i < adet; i++) {
+        const s = document.querySelectorAll('.category-section')[i];
+        if (!s) continue;
+        s.scrollIntoView({ block: 'center' });
+        await bekle(500);                       // scroll olayi + rAF + fillCategory tamamlansin
+        const g = document.querySelectorAll('.category-section')[i];
+        if (!g) continue;
+        const kart = g.querySelectorAll('.product-card').length;
+        if (kart === 0 && g.offsetHeight > 100) sonuc.push('cat-' + i);
+      }
+      window.scrollTo(0, 0);
+      return sonuc;
     });
-    await page.waitForTimeout(1200);
-    const bos = await page.evaluate(() => [...document.querySelectorAll('.category-section')]
-      .map((s, i) => ({ i, kart: s.querySelectorAll('.product-card').length, h: s.offsetHeight }))
-      .filter(x => x.kart === 0 && x.h > 100).map(x => 'cat-' + x.i));
-    if (bos.length) BAD(hedef.name, 'kategori', 'kaydirmaya ragmen BOS kalan bolum: ' + bos.join(','));
-    else OK('kategori', kat + ' kategori, kaydirinca hepsi doldu');
-    await page.evaluate(() => window.scrollTo(0, 0)); await page.waitForTimeout(500);
+    if (bos.length) BAD(hedef.name, 'kategori', 'goruse gelmesine RAGMEN bos kalan bolum: ' + bos.join(','));
+    else OK('kategori', kat + ' kategori, her biri goruse gelince doldu');
+    await page.waitForTimeout(500);
   }
 
   // 5) URUN MODALI
@@ -78,34 +134,49 @@ async function denetle(browser, hedef) {
     else { OK('modal'); await page.locator('.pd-close').first().click().catch(() => {}); await page.waitForTimeout(300); }
   } catch (e) { BAD(hedef.name, 'modal', 'kart tiklanamadi: ' + e.message); }
 
-  // 6) AI: raiShowProduct uzak kategorideki urunu ACIYOR + kart EKRANDA (Bugra,nin cokme senaryosu)
-  const show = await page.evaluate(async () => {
+  // 6) AI: raiShowProduct uzak kategorideki GERCEK urunu ACIYOR + kart EKRANDA (Bugra,nin cokme senaryosu)
+  const show = await page.evaluate(async (SAHTE_STR) => {
+    const SAHTE = new RegExp(SAHTE_STR, 'i');
     const bekle = ms => new Promise(r => setTimeout(r, ms));
     const r = await fetch('/api/menu'); const d = await r.json();
     let cats = (d.result && d.result.categories) || d;
-    cats = cats.filter(c => c.isVisible !== false && c.name !== 'Personel' && c.name !== 'Ekstra İstek');
-    const son = cats[cats.length - 1]; let ad = null;
-    for (const s of (son.sections || [])) for (const p of (s.products || [])) { if (p.inStock !== false) { ad = p.name; break; } }
-    if (!ad || typeof window.raiShowProduct !== 'function') return { hata: 'raiShowProduct yok veya urun yok' };
+    cats = cats.filter(c => c.isVisible !== false && !SAHTE.test(c.name || ''));
+    if (!cats.length) return { hata: 'kategori bulunamadi' };
+    const son = cats[cats.length - 1];
+    // Son kategorinin ILK gercek urunu (servis/ekstra bolumleri elenir; dongu DOGRU kirilir).
+    let ad = null;
+    dis: for (const s of (son.sections || [])) {
+      if (SAHTE.test(s.name || '')) continue;
+      for (const p of (s.products || [])) {
+        if (p.inStock === false) continue;
+        if (SAHTE.test(p.name || '')) continue;
+        ad = p.name; break dis;
+      }
+    }
+    if (!ad) return { hata: son.name + ' kategorisinde test edilebilir gercek urun yok' };
+    if (typeof window.raiShowProduct !== 'function') return { hata: 'raiShowProduct fonksiyonu yok' };
     window.scrollTo(0, 0); await bekle(300);
     const sonuc = window.raiShowProduct(ad);
     await bekle(1200);
-    const kart = [...document.querySelectorAll('.product-card')].find(c => c.querySelector('.product-name')?.textContent.trim() === ad);
+    const kart = [...document.querySelectorAll('.product-card')]
+      .find(c => c.querySelector('.product-name') && c.querySelector('.product-name').textContent.trim() === ad);
     const rect = kart ? kart.getBoundingClientRect() : null;
-    return { urun: ad, sonuc, modal: !!document.querySelector('.pd-overlay.open'),
-      baslik: document.querySelector('.pd-name')?.textContent,
+    return {
+      kategori: son.name, urun: ad, sonuc, modal: !!document.querySelector('.pd-overlay.open'),
+      baslik: document.querySelector('.pd-name') ? document.querySelector('.pd-name').textContent : null,
       kartDOMda: !!kart, ekranda: rect ? (rect.top > -50 && rect.top < window.innerHeight) : false,
-      domKart: document.querySelectorAll('.product-card').length };
-  });
+      domKart: document.querySelectorAll('.product-card').length
+    };
+  }, SAHTE_KALEM.source);
   if (show.hata) BAD(hedef.name, 'ai-kart', show.hata);
   else {
     if (!show.modal) BAD(hedef.name, 'ai-kart', show.urun + ': modal acilmadi');
     else if (show.baslik !== show.urun) BAD(hedef.name, 'ai-kart', 'yanlis urun modali: ' + show.baslik + ' != ' + show.urun);
     else if (!show.kartDOMda) BAD(hedef.name, 'ai-kart', show.urun + ': kart DOM,dan silindi (pin calismiyor)');
     else if (!show.ekranda) BAD(hedef.name, 'ai-kart', show.urun + ': kart ekranda degil (kaydirma hatali)');
-    else OK('ai-kart', show.urun + ' -> modal+konum dogru, DOM ' + show.domKart + ' kart');
+    else OK('ai-kart', show.kategori + '/' + show.urun + ' -> modal+konum dogru, DOM ' + show.domKart + ' kart');
   }
-  await page.evaluate(() => document.querySelector('.pd-overlay')?.classList.remove('open'));
+  await page.evaluate(() => { const o = document.querySelector('.pd-overlay'); if (o) o.classList.remove('open'); });
 
   // 7) SOHBET KALICILIGI (yenileme sonrasi durmali)
   await page.evaluate(m => sessionStorage.setItem('raiHist:' + m, JSON.stringify([
@@ -121,15 +192,18 @@ async function denetle(browser, hedef) {
   // 8) KLAVYE/visualViewport: input,a odaklaninca son mesaj gorunur kalmali
   try {
     const inp = page.locator('.rai-inp');
-    if (await inp.count()) { await inp.click({ timeout: 4000 }); await page.waitForTimeout(600);
-      const gorunur = await page.evaluate(() => { const b = document.getElementById('raiBody'); if (!b) return null;
-        return b.scrollHeight - b.scrollTop - b.clientHeight < 60; });
+    if (await inp.count()) {
+      await inp.click({ timeout: 4000 }); await page.waitForTimeout(600);
+      const gorunur = await page.evaluate(() => {
+        const b = document.getElementById('raiBody'); if (!b) return null;
+        return b.scrollHeight - b.scrollTop - b.clientHeight < 60;
+      });
       if (gorunur === false) BAD(hedef.name, 'klavye', 'input odaklaninca son mesaj gorunmuyor');
       else OK('klavye');
     }
   } catch (e) { BAD(hedef.name, 'klavye', e.message); }
 
-  // 9) DOKUNMA HEDEFI >= 40px
+  // 9) DOKUNMA HEDEFI >= 40px (Apple 44px onerir; 40 esigi ile uyariyoruz)
   const kucuk = await page.evaluate(() => [...document.querySelectorAll('button, .cat-btn, .rai-send, .rai-close, .pd-close')]
     .filter(b => { const r = b.getBoundingClientRect(); return r.width > 0 && (r.height < 40 || r.width < 40); })
     .map(b => (b.className || b.tagName) + ' ' + Math.round(b.getBoundingClientRect().width) + 'x' + Math.round(b.getBoundingClientRect().height)).slice(0, 6));
@@ -150,8 +224,11 @@ async function denetle(browser, hedef) {
   const p2 = await ctx.newPage();
   try {
     await p2.goto(MENU_MASASIZ, { waitUntil: 'networkidle', timeout: 30000 }); await p2.waitForTimeout(1500);
-    const gorunen = await p2.evaluate(() => { const f = document.querySelector('.rai-fab'); const b = document.querySelector('.ai-btn');
-      const gor = el => el && getComputedStyle(el).display !== 'none' && el.offsetParent !== null; return { fab: gor(f), aiBtn: gor(b) }; });
+    const gorunen = await p2.evaluate(() => {
+      const f = document.querySelector('.rai-fab'); const b = document.querySelector('.ai-btn');
+      const gor = el => el && getComputedStyle(el).display !== 'none' && el.offsetParent !== null;
+      return { fab: gor(f), aiBtn: gor(b) };
+    });
     if (gorunen.fab || gorunen.aiBtn) BAD(hedef.name, 'masa-kapisi', 'masasiz /menu,de AI butonu GORUNUYOR: ' + JSON.stringify(gorunen));
     else OK('masa-kapisi', 'masasiz menude AI butonu yok');
   } catch (e) { BAD(hedef.name, 'masa-kapisi', e.message); }
@@ -160,8 +237,10 @@ async function denetle(browser, hedef) {
   // 12) AI SOHBET UCTAN UCA (opsiyonel: gercek LLM cagrisi)
   if (CHAT) {
     const c = await page.evaluate(async (masa) => {
-      const r = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: 'bir kokteyl onerir misin', table: masa, history: [] }) });
+      const r = await fetch('/api/chat', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: 'bir kokteyl onerir misin', table: masa, history: [] })
+      });
       return await r.json();
     }, MASA);
     if (!c || c.ok === false) BAD(hedef.name, 'ai-sohbet', 'api/chat basarisiz: ' + JSON.stringify(c).slice(0, 150));
@@ -190,7 +269,7 @@ async function denetle(browser, hedef) {
   try { fs.mkdirSync(OUT, { recursive: true }); fs.writeFileSync(path.join(OUT, 'ux-audit.json'), JSON.stringify(rapor, null, 2)); } catch (e) {}
   console.log('\n================ DENETIM SONUCU ================');
   console.log('Gecen kontrol: ' + gecen.length + ' | Sorun: ' + sorunlar.length);
-  if (sorunlar.length) { sorunlar.forEach(s => console.log(' - [' + s.cihaz + '][' + s.konu + '] ' + s.mesaj)); }
+  if (sorunlar.length) { sorunlar.forEach(s => console.log('  - [' + s.cihaz + '][' + s.konu + '] ' + s.mesaj)); }
   else console.log('TUM CIHAZLARDA TEMIZ');
   console.log('Rapor: tests/report/ux-audit.json');
   process.exit(sorunlar.length ? 1 : 0);
