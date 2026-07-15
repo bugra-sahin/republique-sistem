@@ -241,7 +241,18 @@ app.get("/blog/:slug", (req, res) => {
         + 'Republique Tunalı · Bestekar Cd 65/B, Çankaya/Ankara · '
         + '<a href="https://share.google/rJCHpjDGK456xl63a" target="_blank" rel="noopener">Google Maps\'te yol tarifi</a> · '
         + '<a href="/menu">Menüyü aç</a> · <a href="/blog">Tüm yazılar</a></div>';
-      if (html.includes("</head>")) html = html.replace("</head>", '<link rel="stylesheet" href="/blog/blog.css">' + rest + '</head>');
+      // 2b) TWITTER/X KARTI (§75 SEO denetimi: 19/19 makalede EKSIKTI - acik kaynak
+      //     maddevs/seo-analyzer "metaSocialRule" ile tespit edildi). Baslik/aciklama/gorsel
+      //     makalenin KENDISINDEN okunur; yoksa makul varsayilana duser. og: etiketleri zaten vardi.
+      const nitelikKacis = (x) => String(x || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+      const bloBaslik = (html.match(/<title[^>]*>([^<]*)<\/title>/i) || [, "Republique Tunalı"])[1].trim();
+      const bloAciklama = (html.match(/<meta\s+name=["']description["']\s+content=["']([^"']*)["']/i) || [, ""])[1].trim();
+      const bloGorsel = (html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']*)["']/i) || [, "https://republique.tr/logo.png"])[1];
+      const twitter = '<meta name="twitter:card" content="summary_large_image">'
+        + '<meta name="twitter:title" content="' + nitelikKacis(bloBaslik) + '">'
+        + (bloAciklama ? '<meta name="twitter:description" content="' + nitelikKacis(bloAciklama) + '">' : '')
+        + '<meta name="twitter:image" content="' + nitelikKacis(bloGorsel) + '">';
+      if (html.includes("</head>")) html = html.replace("</head>", '<link rel="stylesheet" href="/blog/blog.css">' + rest + twitter + '</head>');
       if (/<body[^>]*>/.test(html)) html = html.replace(/<body[^>]*>/, (m) => m + bar);
       else html = bar + html;
       if (html.includes("</body>")) html = html.replace("</body>", foot + "</body>");
