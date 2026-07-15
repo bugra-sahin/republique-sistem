@@ -60,6 +60,11 @@ db.query("ALTER TABLE scans ADD COLUMN IF NOT EXISTS tekrar_gelen BOOLEAN").catc
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// SIKISTIRMA (§76): sunucu HICBIR yaniti sikistirmiyordu -> OLCULDU: /api/menu 276 KB,
+// /menu 64 KB, app.js 16 KB HAM iniyordu. Misafirin mobil verisini yakiyor + acilisi yavaslatiyor.
+// gzip/deflate ile JSON ve HTML ~8-9 kat kuculur. En basta durmali ki TUM yanitlari kapsasin.
+// (Caddyfile'a "encode" eklemek de olurdu ama o CANLIYI aninda etkilerdi; burasi normal terfi akisinda.)
+app.use(require("compression")());
 app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
 
