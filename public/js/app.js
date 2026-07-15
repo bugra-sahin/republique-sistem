@@ -232,8 +232,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // TEMBEL RENDER: kategori ekrana ~800px yaklasinca urunlerini olustur.
+    let io = null;
     if ('IntersectionObserver' in window) {
-      const io = new IntersectionObserver((entries) => {
+      io = new IntersectionObserver((entries) => {
         entries.forEach(e => {
           if (e.isIntersecting) {
             const rec = pending.find(p => p.catSection === e.target);
@@ -249,22 +250,41 @@ document.addEventListener('DOMContentLoaded', () => {
     if (pending[0]) fillCategory(pending[0].catSection, pending[0].category);
     if (pending[1]) fillCategory(pending[1].catSection, pending[1].category);
 
-    // GUVENLIK AGI (KRITIK — OPUS-GOREV IS1): IntersectionObserver bazi kosullarda (ornek: body'de
-    // eski overflow, veya script-scroll) tetiklenmiyor -> kaydiran misafir cat-2..cat-5'i goremiyordu.
-    // Cozum: kalan kategorileri arka planda SIRAYLA (400ms arayla) doldur. Boylece observer'a bagimli
-    // olmadan hepsi ~2-3sn icinde gorunur; ACILISTA yine ~117 kart (bellek korunur) + hepsi AYNI ANDA
-    // cizilmez (jetsam/jank yok, mobil cokme onlemi bozulmaz). content-visibility ekran-disini ucuzlatir.
-    (function backfillRemaining() {
-      let i = 0;
-      function step() {
-        while (i < pending.length && pending[i].catSection.dataset.filled) i++;
-        if (i >= pending.length) return;
-        try { fillCategory(pending[i].catSection, pending[i].category); } catch (e) {}
-        i++;
-        if (i < pending.length) setTimeout(step, 400);
-      }
-      setTimeout(step, 1200); // once observer/scroll sansini ver, sonra garanti doldur
-    })();
+    // ================= PENCERELI RENDER (IS1 + MOBIL COKME BIRLIKTE COZULUR) =================
+    // (a) Hepsini birden cizmek -> 415 kart / ~68.000px sayfa; her kartta backdrop-filter (cam efekti)
+    //     var -> GPU'da cok pahali. AI'in 'bolume git'/'kartini ac' butonuna dokununca uzak noktaya
+    //     (orn. y=62.000) atlayinca Safari o bolgeyi bir anda kompozit etmeye calisiyor -> WebKit
+    //     surec cokmesi -> sekme yeniden yuklenmesi ('sayfa yenilendi'/'atti'). IS1 doldurucusunun yan etkisi.
+    // (b) Hic doldurmamak -> observer tetiklenmezse kategoriler bos kalir (IS1 sikayeti).
+    // COZUM: EKRANA YAKIN kategoriler DOLU, UZAKTAKILER BOSALTILIR -> DOM hep kucuk (bellek/GPU guvenli)
+    // AMA misafir nereye atlarsa atlasin dolu icerik gorur (observer'a bagimli degil).
+    // Bosaltirken OLCULEN GERCEK yukseklik minHeight'a sabitlenir -> sayfa asla ziplamaz.
+    const YAKIN = 2500;
+    const UZAK  = 8000;   // YAKIN<UZAK = histerezis (dolup-bosalma gidip gelmesi yok)
+    function unfillCategory(catSection) {
+      if (!catSection.dataset.filled) return;
+      const h = catSection.offsetHeight;
+      catSection.style.minHeight = h + 'px';
+      while (catSection.firstChild) catSection.removeChild(catSection.firstChild);
+      delete catSection.dataset.filled;
+      if (io) { try { io.observe(catSection); } catch (e) {} }
+    }
+    function ensureWindow() {
+      const vTop = window.scrollY, vBot = vTop + window.innerHeight;
+      pending.forEach(p => {
+        const s = p.catSection, top = s.offsetTop, bot = top + s.offsetHeight;
+        const mesafe = (bot < vTop) ? (vTop - bot) : ((top > vBot) ? (top - vBot) : 0);
+        if (mesafe <= YAKIN) { try { fillCategory(s, p.category); } catch (e) {} }
+        else if (mesafe >= UZAK) { try { unfillCategory(s); } catch (e) {} }
+      });
+    }
+    let _tick = false;
+    window.addEventListener('scroll', function () {
+      if (_tick) return; _tick = true;
+      requestAnimationFrame(function () { _tick = false; ensureWindow(); });
+    }, { passive: true });
+    setTimeout(ensureWindow, 300);
+    window.__raiEnsureWindow = ensureWindow;
 
     // AI [[SHOW:Urun]] icin: SADECE o urunun kategorisini doldur (413 kartin HEPSINI birden cizmek
     // dusuk-bellekli iPhone'da sekmeyi cokertiyordu -> "isterim/gin severim" sonrasi sayfa yenileniyordu).
