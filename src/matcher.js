@@ -12,6 +12,18 @@ const db = require('./db');
 // NOT: Onceki "%100 eslesme" testi YANILTICIYDI - o taramalari sunucudaki Playwright uretmisti,
 //   yani adisyon saatleriyle AYNI (UTC) cerceveden geliyordu. Gercek misafirde durum farkli.
 // Turkiye 2016'dan beri KALICI +03 (yaz saati uygulamasi YOK) -> sabit ofset guvenli.
+// ============ §86: fbclid -> fbc YEDEK DONUSUMU (SUNUCU TARAFI) ============
+// Asil duzeltme app.js'te (tarayicida, tiklama aninda). BU yedek iki isi yapar:
+//   1) VERITABANINDAKI ESKI KAYITLARI KURTARIR (fbclid saklanmis ama fbc bos olan 5 kayit),
+//   2) tarayici tarafi herhangi bir sebeple fbc uretemezse hat yine de calisir.
+// Meta formati: fb.<altAlanIndeksi>.<olusturmaZamani_ms>.<fbclid>
+// Zaman damgasi olarak TARAMA ANI kullanilir (tiklama anina en yakin bildigimiz an).
+function fbcUret(scan) {
+  if (scan.fbc) return scan.fbc;                 // tarayicidan/cerezden geldiyse ONA dokunma
+  if (!scan.fbclid) return undefined;            // reklam tiklamasi yoksa fbc de olmaz
+  return 'fb.1.' + new Date(scan.timestamp).getTime() + '.' + scan.fbclid;
+}
+
 const POS_SAAT_OFSETI = 3; // PionPOS saatleri UTC+3 (Turkiye)
 function parseDate(dateStr) {
   if (!dateStr || dateStr === '--') return null;
@@ -152,7 +164,7 @@ async function processPosUpload(buffer) {
       if (!seenIds.has(s.rep_id)) {
         seenIds.add(s.rep_id);
         const isAd = !!(s.fbclid || ['meta','facebook','ig','instagram'].includes(s.utm_source));
-        uniqueUsersAtTable.push({ rep_id: s.rep_id, isAdThisScan: isAd, timestamp: new Date(s.timestamp).getTime(), fbp: s.fbp, fbc: s.fbc });
+        uniqueUsersAtTable.push({ rep_id: s.rep_id, isAdThisScan: isAd, timestamp: new Date(s.timestamp).getTime(), fbp: s.fbp, fbc: fbcUret(s) });
       }
     }
 
@@ -276,7 +288,7 @@ async function processPosUpload(buffer) {
         type: 'IMPUTE_ORTALAMA',
         label: 'Reklamdan Geldi, Adisyon Eslesmedi (Ortalama Deger)',
         fbp: scan.fbp,
-        fbc: scan.fbc,
+        fbc: fbcUret(scan),   // §86: burasi da ham scan.fbc kullaniyordu -> fbc kayboluyordu
         eventTime: Math.floor(new Date(scan.timestamp).getTime() / 1000),
         capiSent: false
       });
