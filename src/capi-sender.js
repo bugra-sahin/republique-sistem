@@ -50,10 +50,32 @@ async function sendCapiEvent(match) {
 
   try {
     const response = await axios.post(`${url}?access_token=${token}`, payload);
+    // ============ §85: META'NIN CEVABI ARTIK OKUNUYOR ============
+    // ESKI KOD: `response` degiskenini ALIP HIC OKUMUYORDU -> istek gidince "CAPI Basarili"
+    // yaziyorduk. AMA Meta HTTP 200 donup event'i SESSIZCE dusurebilir (events_received: 0)
+    // veya "messages" icinde uyari donebilir. Yani elimizdeki "Basarili" logu KANIT DEGILDI.
+    // Bu, projedeki 3. "sessiz basarisizlik" (bkz. §74-C buton, §82-B buton, §84-C ciro sismesi).
+    const c = (response && response.data) || {};
+    console.log('[CAPI] META CEVABI -> events_received=' + c.events_received +
+                ' | test_kodu=' + (payload.test_event_code || 'YOK!!') +
+                ' | pixel=' + pixelId +
+                ' | mesajlar=' + JSON.stringify(c.messages || []) +
+                ' | fbtrace=' + c.fbtrace_id);
+    console.log('[CAPI] GONDERILEN KIMLIK -> fbp=' + (match.fbp ? 'VAR' : 'YOK') +
+                ' fbc=' + (match.fbc ? 'VAR' : 'YOK') +
+                ' | action_source=physical_store | deger=' + match.perCapita + ' TRY');
+    if (!c.events_received) {
+      console.error('[CAPI] >>> DIKKAT: Meta 200 dondu AMA events_received=' + c.events_received +
+                    ' -> EVENT ALINMADI. "Basarili" YAZILMAYACAK.');
+      return false;
+    }
     console.log(`CAPI Başarılı: ${match.rep_id} - ${match.perCapita} TL`);
     return true;
   } catch (error) {
-    console.error("CAPI Gönderim Hatası:", error.response ? error.response.data : error.message);
+    // §85: hatanin TAMAMINI bas (eskiden sadece data'yi basiyordu, HTTP kodu gorunmuyordu)
+    const r = error.response;
+    console.error('[CAPI] GONDERIM HATASI -> http=' + (r ? r.status : 'YOK') +
+                  ' | cevap=' + (r ? JSON.stringify(r.data) : error.message));
     return false;
   }
 }
