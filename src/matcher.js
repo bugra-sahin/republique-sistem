@@ -1,14 +1,28 @@
 const xlsx = require('xlsx');
 const db = require('./db');
 
+// §83 KRITIK: PionPOS adisyon saatleri TURKIYE YEREL saatidir (+03).
+// AMA konteyner UTC kosuyor -> OLCULDU: `docker exec staging-app-staging-1 date`
+//   -> "Thu Jul 16 08:42:54 UTC 2026"
+// ESKI KOD `new Date(y, m-1, d, h, min)` kullaniyordu = konteynerin TZ'si = UTC.
+// Yani "11:40" -> 11:40 UTC sayiliyordu; oysa gercekte 11:40 Turkiye = 08:40 UTC.
+// SONUC: her adisyon taramalardan TAM 3 SAAT ileri gorunuyordu -> GERCEK HAYATTA HIC ESLESME OLMAZDI.
+// KANIT: gercek tarayicidan (Turkiye) fbclidli tarama 11:38 -> adisyon 11:40 icin
+//   teshis "enYakinFarkDk: -182" dedi (= 3 saat + 2 dk). Tam da bu hata.
+// NOT: Onceki "%100 eslesme" testi YANILTICIYDI - o taramalari sunucudaki Playwright uretmisti,
+//   yani adisyon saatleriyle AYNI (UTC) cerceveden geliyordu. Gercek misafirde durum farkli.
+// Turkiye 2016'dan beri KALICI +03 (yaz saati uygulamasi YOK) -> sabit ofset guvenli.
+const POS_SAAT_OFSETI = 3; // PionPOS saatleri UTC+3 (Turkiye)
 function parseDate(dateStr) {
   if (!dateStr || dateStr === '--') return null;
-  const parts = dateStr.split(' ');
+  const parts = String(dateStr).split(' ');
   if (parts.length !== 2) return null;
   const [datePart, timePart] = parts;
   const [d, m, y] = datePart.split('.');
   const [h, min] = timePart.split(':');
-  return new Date(y, m - 1, d, h, min);
+  if (!d || !m || !y || !h || !min) return null;
+  // Yerel (+03) saati UTC'ye cevirerek MUTLAK an uret -> konteynerin TZ'sinden BAGIMSIZ.
+  return new Date(Date.UTC(Number(y), Number(m) - 1, Number(d), Number(h) - POS_SAAT_OFSETI, Number(min)));
 }
 
 async function processPosUpload(buffer) {
