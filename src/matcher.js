@@ -1,14 +1,40 @@
 const xlsx = require('xlsx');
 const db = require('./db');
 
+// §83 KRITIK: PionPOS adisyon saatleri TURKIYE YEREL saatidir (+03).
+// AMA konteyner UTC kosuyor -> OLCULDU: `docker exec staging-app-staging-1 date`
+//   -> "Thu Jul 16 08:42:54 UTC 2026"
+// ESKI KOD `new Date(y, m-1, d, h, min)` kullaniyordu = konteynerin TZ'si = UTC.
+// Yani "11:40" -> 11:40 UTC sayiliyordu; oysa gercekte 11:40 Turkiye = 08:40 UTC.
+// SONUC: her adisyon taramalardan TAM 3 SAAT ileri gorunuyordu -> GERCEK HAYATTA HIC ESLESME OLMAZDI.
+// KANIT: gercek tarayicidan (Turkiye) fbclidli tarama 11:38 -> adisyon 11:40 icin
+//   teshis "enYakinFarkDk: -182" dedi (= 3 saat + 2 dk). Tam da bu hata.
+// NOT: Onceki "%100 eslesme" testi YANILTICIYDI - o taramalari sunucudaki Playwright uretmisti,
+//   yani adisyon saatleriyle AYNI (UTC) cerceveden geliyordu. Gercek misafirde durum farkli.
+// Turkiye 2016'dan beri KALICI +03 (yaz saati uygulamasi YOK) -> sabit ofset guvenli.
+// ============ §86: fbclid -> fbc YEDEK DONUSUMU (SUNUCU TARAFI) ============
+// Asil duzeltme app.js'te (tarayicida, tiklama aninda). BU yedek iki isi yapar:
+//   1) VERITABANINDAKI ESKI KAYITLARI KURTARIR (fbclid saklanmis ama fbc bos olan 5 kayit),
+//   2) tarayici tarafi herhangi bir sebeple fbc uretemezse hat yine de calisir.
+// Meta formati: fb.<altAlanIndeksi>.<olusturmaZamani_ms>.<fbclid>
+// Zaman damgasi olarak TARAMA ANI kullanilir (tiklama anina en yakin bildigimiz an).
+function fbcUret(scan) {
+  if (scan.fbc) return scan.fbc;                 // tarayicidan/cerezden geldiyse ONA dokunma
+  if (!scan.fbclid) return undefined;            // reklam tiklamasi yoksa fbc de olmaz
+  return 'fb.1.' + new Date(scan.timestamp).getTime() + '.' + scan.fbclid;
+}
+
+const POS_SAAT_OFSETI = 3; // PionPOS saatleri UTC+3 (Turkiye)
 function parseDate(dateStr) {
   if (!dateStr || dateStr === '--') return null;
-  const parts = dateStr.split(' ');
+  const parts = String(dateStr).split(' ');
   if (parts.length !== 2) return null;
   const [datePart, timePart] = parts;
   const [d, m, y] = datePart.split('.');
   const [h, min] = timePart.split(':');
-  return new Date(y, m - 1, d, h, min);
+  if (!d || !m || !y || !h || !min) return null;
+  // Yerel (+03) saati UTC'ye cevirerek MUTLAK an uret -> konteynerin TZ'sinden BAGIMSIZ.
+  return new Date(Date.UTC(Number(y), Number(m) - 1, Number(d), Number(h) - POS_SAAT_OFSETI, Number(min)));
 }
 
 async function processPosUpload(buffer) {
@@ -49,7 +75,7 @@ async function processPosUpload(buffer) {
     gecerliAdisyon: 0,
     masaHicYok: 0,
     zamanTutmadi: 0,
-    pencere: '-30dk / +10dk (§5)',
+    pencere: '-10dk / +20dk, masa acikken kapanisa kadar (§84)',
     ornekler: []
   };
 
@@ -79,6 +105,9 @@ async function processPosUpload(buffer) {
     const totalRaw = totalStr.replace(/[^0-9,]/g, '').replace(',', '.');
     const total = parseFloat(totalRaw) || 0;
     const perCapita = Math.round(total / pax);
+    // §84: adisyonun KAPANIS saati. Masa acik kaldigi surece gelen arkadaslarin
+    // taramalari da sayilsin diye gerekli. (Kolon J = __EMPTY_8; xlsx 0.18.5 ile DOGRULANDI.)
+    const closeTime = parseDate(row['__EMPTY_8']);
 
     // Eşleşen QR taramalarını bul (Açılış -5dk ile +10dk arası)
     const tOpen = openTime.getTime();
@@ -88,18 +117,22 @@ async function processPosUpload(buffer) {
     // ONCE sadece MASA'ya gore sup, SONRA zamana gore -> boylece "masa mi tutmadi,
     // zaman mi tutmadi" AYRI AYRI olculebilir (eskiden tek filtrede birlesikti).
     const masaEslesenler = allScans.filter(scan => (scan.masa || '').toLowerCase().trim() === posMasa);
+    // ============ §84 PENCERE KURALI (Bugra, 2026-07-16) ============
+    // ESKI kod: [acilis-5dk, acilis+10dk] -> hem cok dar, hem masa sirkulasyonunu goz ardi ediyordu.
+    // BUGRA'NIN KURALI: "-10 +20 dakika olsun ve bu araliktan itibaren adisyon ACIK KALDIGI SURECE
+    //   adisyonda yazan kisi sayisi ve okutanlar tutuyorsa onlar o masadan sayilsin."
+    // GEREKCE (Bugra): masalarda sirkulasyon cok; "ilk okutan kazanir" mantiksiz cunku
+    //   ARKADASI DA OKUTABILIR (sonradan gelen kisi de o masanin musterisidir).
+    // UYGULAMA:
+    //   - Gelis penceresi : [acilis - 10dk , acilis + 20dk]
+    //   - Masa acik kaldigi surece: pencere KAPANIS saatine kadar UZAR (sonradan gelen arkadas da sayilir)
+    //   - Ust sinir       : adisyondaki "Kisi Sayisi" kadar KISI sayilir (asagida, tekillestirmeden sonra)
+    const tClose = closeTime ? closeTime.getTime() : null;
+    const pencereBas = tOpen - 10 * 60000;
+    const pencereSon = Math.max(tOpen + 20 * 60000, tClose || 0);
     const tableScans = masaEslesenler.filter(scan => {
       const scanTime = new Date(scan.timestamp).getTime();
-      // §82 PENCERE DUZELTMESI (OLCUMLE bulundu):
-      //   ESKI: (tOpen - 300000) = taramadan sadece 5 DAKIKA once -> GERCEK HAYATTA COGU
-      //   ESLESME KACIYORDU. Cunku §5'te yazan gercek akis: "Once QR taranir, SONRA adisyon
-      //   acilir (tipik: tarama 12:50 -> adisyon 12:55)". Yani tarama, adisyon acilisindan
-      //   DAKIKALARCA ONCE olur; 5 dakika cok dar.
-      //   KANIT (test2, gercek tarama verisi): adisyon 22:40 icin en yakin tarama -16 dk ->
-      //   ESKI kod bunu REDDEDIYORDU. Tam da yakalamamiz gereken senaryo buydu.
-      //   §5 SARTNAMESI: "adisyon acilisi, taramadan sonra <=30 dk VEYA taramadan once <=10 dk"
-      //   -> tarama araligi = [acilis - 30dk , acilis + 10dk]
-      return scanTime >= (tOpen - 1800000) && scanTime <= (tOpen + 600000);
+      return scanTime >= pencereBas && scanTime <= pencereSon;
     });
 
     // ---- TESHIS (§82) ----
@@ -131,8 +164,25 @@ async function processPosUpload(buffer) {
       if (!seenIds.has(s.rep_id)) {
         seenIds.add(s.rep_id);
         const isAd = !!(s.fbclid || ['meta','facebook','ig','instagram'].includes(s.utm_source));
-        uniqueUsersAtTable.push({ rep_id: s.rep_id, isAdThisScan: isAd, timestamp: new Date(s.timestamp).getTime(), fbp: s.fbp, fbc: s.fbc });
+        uniqueUsersAtTable.push({ rep_id: s.rep_id, isAdThisScan: isAd, timestamp: new Date(s.timestamp).getTime(), fbp: s.fbp, fbc: fbcUret(s) });
       }
+    }
+
+    // ============ §84 KISI SAYISI SINIRI ============
+    // ESKIDEN SINIR YOKTU: masada 6 kisi okutup adisyonda "2 kisi" yaziyorsa 6 event gidiyordu
+    // ve her birine kisi basi tutar (toplam/2) atfediliyordu -> CIRO 3 KAT SISIYORDU.
+    // Bugra: "adisyonda yazan kisi sayisi ve okutanlar tutuyorsa onlar o masadan sayilsin."
+    // Kural: zaman sirasina gore ILK 'pax' KISI sayilir (once gelenler = asil parti),
+    // fazlasi bir sonraki partinin/gecen birinin taramasi kabul edilip ELENIR.
+    uniqueUsersAtTable.sort((a, b) => a.timestamp - b.timestamp);
+    const okutanHam = uniqueUsersAtTable.length;
+    if (okutanHam > pax) {
+      uniqueUsersAtTable.length = pax;   // pax kadarini tut, gerisini at
+      tani.kisiSiniriUygulandi = (tani.kisiSiniriUygulandi || 0) + 1;
+      if (tani.ornekler.length < 6) tani.ornekler.push({
+        masa: posMasa, sebep: 'kisi sayisi siniri uygulandi',
+        okutanKisi: okutanHam, adisyondakiKisi: pax, sayilan: pax
+      });
     }
 
     if (uniqueUsersAtTable.length === 0) continue; // Masada QR okutan yok (Sistem dışı organik)
@@ -238,7 +288,7 @@ async function processPosUpload(buffer) {
         type: 'IMPUTE_ORTALAMA',
         label: 'Reklamdan Geldi, Adisyon Eslesmedi (Ortalama Deger)',
         fbp: scan.fbp,
-        fbc: scan.fbc,
+        fbc: fbcUret(scan),   // §86: burasi da ham scan.fbc kullaniyordu -> fbc kayboluyordu
         eventTime: Math.floor(new Date(scan.timestamp).getTime() / 1000),
         capiSent: false
       });
