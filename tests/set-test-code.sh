@@ -18,6 +18,11 @@ set -euo pipefail
 
 ENVF="${ENVF:-/opt/republique-staging/.env}"
 KOD="${1:-}"
+# §86: KONSOL CAPS'I TERS CEVIRDIGI ICIN gelen argumani BUYUK HARFE cevir.
+# OLCULDU: "bash tests/set-test-code.sh TEST97623" yazdim -> .env'e "test97623" (KUCUK) yazildi.
+# Meta test kodu BUYUK/KUCUK HARFE DUYARLIDIR -> kucuk yazilirsa Test Events'te ASLA gorunmez.
+# Artik konsolda kucuk de yazsan buyuk de yazsan DOGRU kod yazilir.
+KOD="$(printf '%s' "${KOD}" | tr 'a-z' 'A-Z')"
 
 if [ -z "$KOD" ]; then
   echo "KULLANIM: bash tests/set-test-code.sh TEST73493"
