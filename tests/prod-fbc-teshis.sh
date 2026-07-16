@@ -18,9 +18,9 @@ echo "=== 3) OZET ==="
 $P "SELECT CASE WHEN count(*)=0 THEN 'REKLAM TARAMASI YOK' WHEN count(*) FILTER (WHERE fbc IS NULL OR fbc='')=0 THEN 'GECTI - fbclidli taramalarin HEPSINDE fbc VAR' ELSE 'SORUN - ' || count(*) FILTER (WHERE fbc IS NULL OR fbc='') || ' taramada fbc YOK' END FROM scans WHERE fbclid IS NOT NULL AND fbclid <> '' AND timestamp > now() - interval '2 hours';"
 
 echo ""
-echo "=== 4) SON 10 TARAMA - FBCLID FARKETMEKSIZIN (masa/cihaz/fbclid) ==="
-$P "SELECT masa, cihaz, CASE WHEN fbclid IS NULL OR fbclid='' THEN 'fbclid-YOK' ELSE 'fbclid=' || left(fbclid,12) END AS reklam, to_char(timestamp,'DD.MM HH24:MI') AS zaman FROM scans ORDER BY timestamp DESC LIMIT 10;"
+echo "=== 4) SON 10 MOBIL TARAMA - telefon testi buradan gorunur ==="
+$P "SELECT coalesce(masa,'(masa-YOK)') AS masa, CASE WHEN fbclid IS NULL OR fbclid='' THEN 'fbclid-YOK' ELSE 'fbclid-VAR' END AS f1, CASE WHEN fbc IS NULL OR fbc='' THEN 'fbc-YOK' ELSE 'fbc-VAR' END AS f2, coalesce(kaynak_tur,'-') AS kaynak, to_char(timestamp,'DD.MM HH24:MI') AS zaman FROM scans WHERE user_agent ILIKE '%iPhone%' OR user_agent ILIKE '%Android%' ORDER BY timestamp DESC LIMIT 10;"
 
 echo ""
-echo "=== 5) SON 10 MOBIL TARAMA (telefon testi buradan gorunur) ==="
-$P "SELECT masa, CASE WHEN fbclid IS NULL OR fbclid='' THEN 'fbclid-YOK' ELSE 'fbclid-VAR' END AS reklam, CASE WHEN fbc IS NULL OR fbc='' THEN 'fbc-YOK' ELSE 'fbc-VAR' END AS fbc, to_char(timestamp,'DD.MM HH24:MI') AS zaman FROM scans WHERE cihaz='Mobil' ORDER BY timestamp DESC LIMIT 10;"
+echo "=== 5) SON 6 TARAMANIN REFERRER'I (link nereden acildi) ==="
+$P "SELECT coalesce(masa,'(yok)') AS masa, CASE WHEN referrer IS NULL OR referrer='' THEN '(referrer-yok)' ELSE left(referrer,40) END AS ref, to_char(timestamp,'HH24:MI') AS zaman FROM scans ORDER BY timestamp DESC LIMIT 6;"
