@@ -50,7 +50,22 @@ document.addEventListener('DOMContentLoaded', () => {
     // Wait a bit to let Meta Pixel initialize and set _fbp / _fbc
     setTimeout(async () => {
       const fbp = getCookie('_fbp');
-      const fbc = getCookie('_fbc');
+      // ============ §86: fbclid -> fbc DONUSUMU (KIRIK HALKA BURASIYDI) ============
+      // ESKI KOD: fbc SADECE Meta Pixel'in yazdigi _fbc cerezinden okunuyordu.
+      // Pixel yuklenmediyse / cerez rizasi verilmediyse / pixel gec yazdiysa -> fbc BOS gidiyordu.
+      // OLCUM (test2 DB, 520 tarama): fbclid'i olan GERCEK taramalarin HEPSINDE fbc YOK'tu
+      // (fbc'si olan tek satirlar elle uretilmis CAPITEST kayitlariydi).
+      // fbc, reklam tiklamasini (fbclid) tasiyan TEK alandir -> fbc yoksa Meta satisi hangi
+      // reklamin getirdigini BILEMEZ. Projenin ANA AMACI bu satir yuzunden calismiyordu.
+      // Meta formati: fb.<altAlanIndeksi>.<olusturmaZamani_ms>.<fbclid>
+      const fbcCerez = getCookie('_fbc');
+      let fbc = fbcCerez;
+      if (!fbc && params.fbclid) {
+        fbc = 'fb.1.' + Date.now() + '.' + params.fbclid;
+        // Cerezi biz yazalim: ayni ziyaretcinin SONRAKI taramalari da AYNI fbc'yi kullansin
+        // (yoksa her taramada olusturma zamani kayar -> Meta atfi bozulur).
+        try { setCookie('_fbc', fbc, 90); } catch (e) {}
+      }
 
       try {
         await fetch('/api/track', {
