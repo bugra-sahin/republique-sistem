@@ -101,6 +101,10 @@ async function processPosUpload(buffer) {
     if (!openTime) continue;
 
     const pax = parseInt(row['__EMPTY_10']) || 1;
+    // §90: Adisyon ID = A sutunu. sheet_to_json 1.satiri ('Adisyon Listesi') BASLIK sayar ->
+    // A sutununun anahtari 'Adisyon Listesi' olur. GERCEK PionPOS dosyasiyla DOGRULANDI
+    // (A='Adisyon ID', deger orn. 'lxl19K4Oa1HtZImQ...'). Bos gelirse masa+acilis ile yedekle.
+    const adisyonId = String(row['Adisyon Listesi'] || (String(masaName) + '@' + row['__EMPTY_6'])).trim();
     const totalStr = row['__EMPTY_12'] || '0';
     const totalRaw = totalStr.replace(/[^0-9,]/g, '').replace(',', '.');
     const total = parseFloat(totalRaw) || 0;
@@ -164,7 +168,8 @@ async function processPosUpload(buffer) {
       if (!seenIds.has(s.rep_id)) {
         seenIds.add(s.rep_id);
         const isAd = !!(s.fbclid || ['meta','facebook','ig','instagram'].includes(s.utm_source));
-        uniqueUsersAtTable.push({ rep_id: s.rep_id, isAdThisScan: isAd, timestamp: new Date(s.timestamp).getTime(), fbp: s.fbp, fbc: fbcUret(s) });
+        // §90: scanId (event_id icin) + GERCEK misafir ip/user_agent (CAPI user_data icin) tasinir.
+        uniqueUsersAtTable.push({ rep_id: s.rep_id, isAdThisScan: isAd, timestamp: new Date(s.timestamp).getTime(), fbp: s.fbp, fbc: fbcUret(s), scanId: s.id, ip: s.ip, user_agent: s.user_agent });
       }
     }
 
@@ -232,6 +237,11 @@ async function processPosUpload(buffer) {
       results.matches.push({
         rep_id: u.rep_id,
         masa: masaName,
+        adisyonId: adisyonId,   // §90
+        scanId: u.scanId,       // §90
+        pax: pax,               // §90 (ReklamMisafiri kac adet gidecek)
+        ip: u.ip,               // §90
+        user_agent: u.user_agent, // §90
         time: row['__EMPTY_6'],
         total: total,
         perCapita: perCapita,
@@ -282,6 +292,9 @@ async function processPosUpload(buffer) {
       results.matches.push({
         rep_id: rep_id,
         masa: scan.masa,
+        scanId: scan.id,          // §90
+        ip: scan.ip,              // §90
+        user_agent: scan.user_agent, // §90
         time: new Date(scan.timestamp).toISOString(),
         total: avgPerCapita,
         perCapita: avgPerCapita,
