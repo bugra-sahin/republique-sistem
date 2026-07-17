@@ -6,7 +6,7 @@ const { startFirestoreListener } = require("./src/firestore-listener");
 const db = require("./src/db");
 const multer = require("multer");
 const { processPosUpload } = require("./src/matcher");
-const { processCapiBatch } = require("./src/capi-sender");
+const { processCapiBatch, ziyaretEventiGonder } = require("./src/capi-sender");
 const { chatWithWaiter, flattenMenu } = require("./src/ai-waiter");
 
 // AI sohbet gecmisi tablosu (ilk ay+ kayit; ogrenme/analiz icin)
@@ -602,11 +602,28 @@ app.post("/api/track", async (req, res) => {
         "SELECT 1 FROM scans WHERE rep_id = $1 AND timestamp < now() - interval '6 hours' LIMIT 1", [rep_id]);
       tekrar_gelen = r.rowCount > 0;
     } catch (e) { /* kolon/tablo yoksa sessizce gec */ }
-    await db.query(
+    const eklenen = await db.query(
       `INSERT INTO scans (rep_id, fbp, fbc, masa, utm_source, utm_medium, utm_campaign, utm_content, utm_term, fbclid, user_agent, ip, kaynak_tur, referrer, tekrar_gelen)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING id, timestamp`,
       [rep_id, fbp, fbc, masa, utm_source, utm_medium, utm_campaign, utm_content, utm_term, fbclid, userAgent, ip, kaynak_tur, String(referrer || "").slice(0, 300), tekrar_gelen]
     );
+    // ============ §90: RestoranZiyaret CAPI eventi ============
+    // Bugra: "masa parametreli HER taramada gonderilir; masasiz /menu ziyaretinde ASLA gonderme."
+    // ATESLE-UNUT: misafirin cevabini BEKLETMEZ. Meta yavaslarsa/hata verirse tarama kaydi
+    // yine de basarili doner (event kaybi < misafir bekletmek).
+    // NOT: masasiz kontrolu ayrica capi-sender icinde de var (cift emniyet).
+    const yeniTarama = eklenen && eklenen.rows && eklenen.rows[0];
+    if (yeniTarama && masa) {
+      ziyaretEventiGonder({
+        id: yeniTarama.id,
+        timestamp: yeniTarama.timestamp,
+        masa: masa,
+        fbp: fbp,
+        fbc: fbc,
+        ip: ip,
+        user_agent: userAgent
+      }).catch(e => console.error('[CAPI][RestoranZiyaret] gonderilemedi:', e.message));
+    }
     res.json({ success: true });
   } catch (err) {
     console.error('Track error:', err);
