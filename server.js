@@ -631,6 +631,73 @@ app.post("/api/track", async (req, res) => {
   }
 });
 
+// ============ §94: KAYNAK KIRILIMI RAPORU (Bugra'nin istegi) ============
+// KURAL: utm etiketi VARSA ona gore; YOKSA referrer alan adina gore siniflandir.
+// Kategoriler: Google organik / Google Maps / Instagram / TikTok / AI araclari / dogrudan-QR / diger
+// NOT: masasiz (/menu) ziyaretler HARIC degil - "gelen" degil ama KAYNAK raporunda gorunur;
+//      'sadece_masali=1' parametresiyle masalilar suzulebilir.
+const KAYNAK_SQL = `
+  CASE
+    -- 1) UTM VARSA ONCELIK ONUN
+    WHEN lower(coalesce(utm_source,'')) IN ('instagram','ig')                    THEN 'Instagram'
+    WHEN lower(coalesce(utm_source,'')) IN ('tiktok')                            THEN 'TikTok'
+    WHEN lower(coalesce(utm_source,'')) IN ('meta','facebook','fb')              THEN 'Instagram'
+    WHEN lower(coalesce(utm_source,'')) LIKE '%maps%'                            THEN 'Google Maps'
+    WHEN lower(coalesce(utm_source,'')) IN ('google','gbp','google-business')    THEN 'Google Maps'
+    WHEN coalesce(utm_source,'') <> ''                                           THEN 'Diger (utm: ' || lower(utm_source) || ')'
+    -- 2) UTM YOKSA REFERRER ALAN ADI
+    WHEN referrer ILIKE '%google.%/maps%' OR referrer ILIKE '%maps.google%'
+      OR referrer ILIKE '%goo.gl/maps%' OR referrer ILIKE '%g.page%'             THEN 'Google Maps'
+    WHEN referrer ILIKE '%google.%'                                              THEN 'Google organik'
+    WHEN referrer ILIKE '%instagram.%' OR referrer ILIKE '%facebook.%'
+      OR referrer ILIKE '%fb.com%' OR referrer ILIKE '%l.facebook%'              THEN 'Instagram'
+    WHEN referrer ILIKE '%tiktok.%'                                              THEN 'TikTok'
+    WHEN referrer ILIKE '%chatgpt.%' OR referrer ILIKE '%openai.%'
+      OR referrer ILIKE '%perplexity.%' OR referrer ILIKE '%gemini.%'
+      OR referrer ILIKE '%bard.google%' OR referrer ILIKE '%bing.%'
+      OR referrer ILIKE '%copilot.%' OR referrer ILIKE '%claude.%'               THEN 'AI araclari'
+    -- 3) REFERRER DA YOKSA: QR/dogrudan (masa parametresi varsa QR kabul edilir)
+    WHEN coalesce(referrer,'') = '' AND masa IS NOT NULL
+      AND lower(btrim(masa)) NOT IN ('','--','bilinmiyor','undefined','null')    THEN 'Dogrudan-QR'
+    WHEN coalesce(referrer,'') = ''                                              THEN 'Dogrudan (masasiz)'
+    ELSE 'Diger'
+  END`;
+
+app.get("/api/admin/kaynak-raporu", async (req, res) => {
+  try {
+    const gun = Math.min(parseInt(req.query.gun) || 30, 180);
+    const sadeceMasali = req.query.sadece_masali === '1';
+    const masaSarti = sadeceMasali
+      ? ` AND masa IS NOT NULL AND lower(btrim(masa)) NOT IN ('','--','bilinmiyor','undefined','null')`
+      : '';
+    // GUN kirilimi (Turkiye saati)
+    const { rows: gunluk } = await db.query(
+      `SELECT to_char((timestamp AT TIME ZONE 'Europe/Istanbul')::date, 'YYYY-MM-DD') AS gun,
+              ${KAYNAK_SQL} AS kaynak, count(*)::int AS adet
+         FROM scans
+        WHERE timestamp >= now() - ($1||' days')::interval${masaSarti}
+        GROUP BY 1, 2 ORDER BY 1 DESC, 3 DESC`, [String(gun)]);
+    // HAFTA kirilimi
+    const { rows: haftalik } = await db.query(
+      `SELECT to_char(date_trunc('week', timestamp AT TIME ZONE 'Europe/Istanbul'), 'YYYY-MM-DD') AS hafta,
+              ${KAYNAK_SQL} AS kaynak, count(*)::int AS adet
+         FROM scans
+        WHERE timestamp >= now() - ($1||' days')::interval${masaSarti}
+        GROUP BY 1, 2 ORDER BY 1 DESC, 3 DESC`, [String(gun)]);
+    // TOPLAM
+    const { rows: toplam } = await db.query(
+      `SELECT ${KAYNAK_SQL} AS kaynak, count(*)::int AS adet,
+              count(DISTINCT rep_id)::int AS tekil
+         FROM scans
+        WHERE timestamp >= now() - ($1||' days')::interval${masaSarti}
+        GROUP BY 1 ORDER BY 2 DESC`, [String(gun)]);
+    res.json({ gun, sadeceMasali, toplam, gunluk, haftalik });
+  } catch (err) {
+    console.error('Kaynak raporu error:', err.message);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
 // === ADMIN PANELİ API'LERİ ===
 
 app.get("/api/admin/reports", async (req, res) => {
@@ -677,7 +744,33 @@ app.post("/api/admin/upload-pos", upload.single('pos_file'), async (req, res) =>
       return res.status(400).json({ error: "Dosya yüklenmedi" });
     }
     const reportData = await processPosUpload(req.file.buffer);
-    await processCapiBatch(reportData.matches);
+    // §94: processCapiBatch artik Meta'ya giden event ADETLERINI donduruyor -> panele tasi.
+    const capiOzet = await processCapiBatch(reportData.matches);
+    // ============ §94: PANEL GUNLUK SAYILARI ============
+    // Bugra: "gunluk gelen (RestoranZiyaret) / reklam baglantili misafir / toplam eslesen ciro /
+    //         Meta'ya giden event adetleri" panelde gorunsun.
+    // NOT: RestoranZiyaret tarama aninda (server.js /api/track) gonderilir, adisyon yuklemesinde
+    //      DEGIL -> "bugun gelen" sayisi DB'den okunur (masali + bugun).
+    try {
+      const { rows: g } = await db.query(
+        `SELECT count(*)::int AS gelen,
+                count(DISTINCT rep_id)::int AS tekil_gelen
+           FROM scans
+          WHERE timestamp >= date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul') AT TIME ZONE 'Europe/Istanbul'
+            AND masa IS NOT NULL
+            AND lower(btrim(masa)) NOT IN ('', '--', 'bilinmiyor', 'undefined', 'null')`
+      );
+      reportData.panel = {
+        bugunGelen: (g[0] && g[0].gelen) || 0,              // RestoranZiyaret adedi (masali tarama)
+        bugunTekilGelen: (g[0] && g[0].tekil_gelen) || 0,
+        reklamBaglantiliMisafir: capiOzet ? capiOzet.reklamMisafiri : 0,
+        toplamEslesenCiro: reportData.totalAdRevenue || 0,
+        metayaGidenEventler: capiOzet || {}
+      };
+    } catch (e) {
+      console.error('[panel] gunluk sayilar okunamadi:', e.message);
+      reportData.panel = { hata: e.message };
+    }
     res.json({ success: true, report: reportData });
   } catch (err) {
     console.error('Upload error:', err);
