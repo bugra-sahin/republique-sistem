@@ -36,6 +36,18 @@ function masasizMi(masa) {
   return MASASIZ_DEGERLER.includes(String(masa).trim().toLowerCase());
 }
 
+// ============ s95: IS GUNU (Bugra: dukkan 09:00-01:00 calisiyor) ============
+// Takvim gunu DEGIL. Gece 00:30'daki okutma ONCEKI is gunune aittir.
+// ESIK = 05:00 -> dukkan 01:00'de kapaniyor, 09:00'da aciliyor; 05:00 kapali pencerenin ortasi,
+// yani hicbir gercek misafir taramasi esige denk gelmez. (s95 karari, Bugra onayli.)
+const IS_GUNU_ESIGI_SAAT = 5;
+const TR_OFSET_SAAT = 3;
+function isGunu(ts) {
+  const d = ts ? new Date(ts) : new Date();
+  const kaydirilmis = d.getTime() + (TR_OFSET_SAAT * 3600 * 1000) - (IS_GUNU_ESIGI_SAAT * 3600 * 1000);
+  return new Date(kaydirilmis).toISOString().slice(0, 10);   // YYYY-MM-DD
+}
+
 function kimlikBlogu(k) {
   const ud = {};
   if (k.fbp) ud.fbp = k.fbp;
@@ -126,7 +138,7 @@ async function ziyaretEventiGonder(scan) {
   const event = {
     event_name: 'RestoranZiyaret',
     event_time: eventTime,
-    event_id: String(scan.id),                 // Bugra: event_id = taramaID
+    event_id: 'rz-' + (scan.rep_id || scan.id) + '-' + isGunu(scan.timestamp),   // s95: TEKIL KISI + IS GUNU
     action_source: 'website',
     event_source_url: masaUrl(scan.masa),
     user_data: kimlikBlogu(scan)
@@ -159,8 +171,12 @@ function reklamMisafiriEventleri(adisyonlar) {
         action_source: 'physical_store',
         event_source_url: masaUrl(a.masa),
         user_data: kimlikBlogu(kimlik),
-        custom_data: { content_name: 'Reklam Misafiri' },   // s94: ozel donusum kurali icin etiket
-        // DEGERSIZ (Bugra'nin karari)
+        custom_data: {
+          value: a.perCapita,                            // s95: Bugra karari DEGISTI -> DEGERLI
+          currency: 'TRY',                               // kisi basi pay; kisi x pay = masa toplami
+          content_name: 'Reklam Misafiri',               // s94: ozel donusum kurali icin etiket
+          content_category: (kimlik && kimlik.type) || 'BILINMIYOR'
+        }
       });
     }
   }
@@ -172,12 +188,20 @@ function reklamMisafiriEventleri(adisyonlar) {
 //         Deger = kisi basi pay (mevcut Purchase kuraliyla AYNI hesap). event_id = adisyonID + taramaID.'
 // NOT: IMPUTE_ORTALAMA kayitlarinin ADISYONU YOK (eslesmemis ziyaretci) -> TumSatislar'a GIRMEZ.
 function tumSatislarEventleri(matches) {
+  const gorulenKisi = {};                    // s95: adisyon|kisi -> mukerrer koruma
   return matches
-    .filter(m => m.adisyonId && m.type !== 'IMPUTE_ORTALAMA')
+    .filter(m => {
+      // s95: ESLESEN TEKIL KISI basina 1 kayit -> RestoranZiyaret ile kiyaslanabilir olsun
+      if (!m.adisyonId || m.type === 'IMPUTE_ORTALAMA') return false;
+      const anahtar = m.adisyonId + '|' + m.rep_id;
+      if (gorulenKisi[anahtar]) return false;
+      gorulenKisi[anahtar] = true;
+      return true;
+    })
     .map(m => ({
       event_name: 'TumSatislar',
       event_time: m.eventTime,
-      event_id: m.adisyonId + '-' + m.scanId,    // Bugra: adisyonID + taramaID
+      event_id: 'ts-' + m.adisyonId + '-' + m.rep_id,   // s95: adisyonID + TEKIL KISI
       action_source: 'physical_store',
       event_source_url: masaUrl(m.masa),
       user_data: kimlikBlogu(m),
@@ -196,7 +220,7 @@ function adisyonlaraGrupla(matches) {
   for (const m of matches) {
     if (!m.adisyonId || m.type === 'IMPUTE_ORTALAMA') continue;
     if (!harita[m.adisyonId]) {
-      harita[m.adisyonId] = { adisyonId: m.adisyonId, masa: m.masa, pax: m.pax, eventTime: m.eventTime, kisiler: [] };
+      harita[m.adisyonId] = { adisyonId: m.adisyonId, masa: m.masa, pax: m.pax, eventTime: m.eventTime, perCapita: m.perCapita, total: m.total, kisiler: [] };   // s95: deger icin perCapita+total
     }
     harita[m.adisyonId].kisiler.push(m);
   }
@@ -244,6 +268,7 @@ async function processCapiBatch(matches) {
 }
 
 module.exports = {
+  isGunu,                                    // s95: is gunu hesabi (server.js mukerrer kontrolu icin)
   processCapiBatch,
   ziyaretEventiGonder
 };
