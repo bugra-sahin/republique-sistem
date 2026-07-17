@@ -40,13 +40,15 @@
 
   h2.bolum { font-size: 14px; margin: 18px 0 8px; color: var(--text-secondary, #9aa4b2); font-weight: 600; }
 
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  /* admin.css tablolara min-width:560px dayatiyor -> 390px telefonda yatay kaydirma yapiyordu. IPTAL: */
+  table { width: 100%; min-width: 0; table-layout: fixed; border-collapse: collapse; font-size: 13px; }
+  td, th { overflow: hidden; text-overflow: ellipsis; }
   th, td { text-align: left; padding: 9px 6px; border-bottom: 1px solid var(--border-color, #2a2f3a); }
   th { color: var(--text-secondary, #9aa4b2); font-weight: 600; font-size: 12px; }
   td.sag, th.sag { text-align: right; }
   .cubuk { height: 6px; background: var(--accent-blue, #60a5fa); border-radius: 3px; min-width: 2px; }
 
-  .son7 td.gun { white-space: nowrap; }
+  .son7 td.gun { white-space: normal; }
   .rozet { display: inline-block; font-size: 10px; padding: 2px 6px; border-radius: 6px;
            background: #2a2f3a; color: #9aa4b2; margin-left: 4px; }
   .yukleniyor { text-align: center; padding: 30px; color: var(--text-secondary, #9aa4b2); }
