@@ -6,8 +6,19 @@ const { startFirestoreListener } = require("./src/firestore-listener");
 const db = require("./src/db");
 const multer = require("multer");
 const { processPosUpload } = require("./src/matcher");
-const { processCapiBatch, ziyaretEventiGonder } = require("./src/capi-sender");
+const { processCapiBatch, ziyaretEventiGonder, isGunu } = require("./src/capi-sender");
 const { chatWithWaiter, flattenMenu } = require("./src/ai-waiter");
+
+// ============ s96: PANEL GUNLUK OZET (gun secici + son 7 gun icin) ============
+// Adisyon kaynakli sayilar SADECE dosya yuklenirken hesaplaniyordu (bellekte).
+// Gun secici icin kalici olmali -> her yuklemede o IS GUNU icin yaziliyor.
+db.query(`CREATE TABLE IF NOT EXISTS panel_gunluk (
+  is_gunu DATE PRIMARY KEY,
+  eslesen_kisi INTEGER, eslesen_ciro INTEGER,
+  reklam_misafir INTEGER, reklam_ciro INTEGER,
+  gecerli_adisyon INTEGER, eslesen_adisyon INTEGER, taramasiz_adisyon INTEGER,
+  eventler JSONB, guncellendi TIMESTAMPTZ DEFAULT now()
+)`).catch(e => console.error("panel_gunluk tablo:", e.message));
 
 // AI sohbet gecmisi tablosu (ilk ay+ kayit; ogrenme/analiz icin)
 db.query(`CREATE TABLE IF NOT EXISTS chat_logs (
@@ -724,6 +735,87 @@ app.get("/api/admin/kaynak-raporu", async (req, res) => {
 
 // === ADMIN PANELİ API'LERİ ===
 
+// ============ s96: PANEL ARAYUZU UCLARI ============
+// Bugra: telefondan yonetecek -> tek istekte butun gunluk sayilar.
+// Tarama kaynakli sayilar CANLI hesaplanir; adisyon kaynakli sayilar panel_gunluk'ten okunur.
+function isGunuGecerliMi(g) { return typeof g === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(g); }
+
+app.get("/api/admin/panel", async (req, res) => {
+  try {
+    const gun = isGunuGecerliMi(req.query.gun) ? req.query.gun : null;
+    const { rows: g } = await db.query(
+      `SELECT count(*)::int AS tarama, count(DISTINCT rep_id)::int AS tekil
+         FROM scans
+        WHERE (((timestamp AT TIME ZONE 'Europe/Istanbul') - interval '5 hours')::date) = COALESCE($1::date, (((now() AT TIME ZONE 'Europe/Istanbul') - interval '5 hours')::date))
+          AND masa IS NOT NULL AND lower(btrim(masa)) NOT IN ('', '--', 'bilinmiyor', 'undefined', 'null')`, [gun]);
+    const { rows: kay } = await db.query(
+      `SELECT ${KAYNAK_SQL} AS kaynak, count(*)::int AS adet, count(DISTINCT rep_id)::int AS tekil
+         FROM scans
+        WHERE (((timestamp AT TIME ZONE 'Europe/Istanbul') - interval '5 hours')::date) = COALESCE($1::date, (((now() AT TIME ZONE 'Europe/Istanbul') - interval '5 hours')::date))
+        GROUP BY 1 ORDER BY 2 DESC`, [gun]);
+    const { rows: pg } = await db.query(
+      `SELECT *, is_gunu::text AS gun_metin FROM panel_gunluk WHERE is_gunu = COALESCE($1::date, (((now() AT TIME ZONE 'Europe/Istanbul') - interval '5 hours')::date))`, [gun]);
+    const { rows: hg } = await db.query(`SELECT COALESCE($1::date, (((now() AT TIME ZONE 'Europe/Istanbul') - interval '5 hours')::date))::text AS gun`, [gun]);
+
+    const p = pg[0] || {};
+    const gelenTekilKisi = (g[0] && g[0].tekil) || 0;
+    const eslesenKisi = p.eslesen_kisi || 0;
+    const gecerliAdisyon = p.gecerli_adisyon || 0;
+    const taramasizAdisyon = p.taramasiz_adisyon || 0;
+
+    res.json({
+      isGunu: hg[0].gun,
+      adisyonVerisiVar: pg.length > 0,          // false -> o gun dosya yuklenmemis
+      gelenTekilKisi: gelenTekilKisi,
+      gelenTarama: (g[0] && g[0].tarama) || 0,
+      eslesenKisi: eslesenKisi,
+      eslesmeOrani: gelenTekilKisi > 0 ? Math.round((eslesenKisi / gelenTekilKisi) * 100) : 0,
+      eslesenToplamCiro: p.eslesen_ciro || 0,
+      reklamBaglantiliMisafir: p.reklam_misafir || 0,
+      reklamBaglantiliCiro: p.reklam_ciro || 0,
+      gecerliAdisyon: gecerliAdisyon,
+      eslesenAdisyon: p.eslesen_adisyon || 0,
+      taramasizAdisyon: taramasizAdisyon,
+      taramasizAdisyonYuzdesi: gecerliAdisyon > 0 ? Math.round((taramasizAdisyon / gecerliAdisyon) * 100) : 0,
+      metayaGidenEventler: p.eventler || {},
+      kaynakDagilimi: kay || [],
+      guncellendi: p.guncellendi || null
+    });
+  } catch (e) {
+    console.error('[s96] panel ucu:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/api/admin/panel/son7", async (req, res) => {
+  try {
+    const { rows } = await db.query(
+      `WITH gunler AS (
+         SELECT generate_series((((now() AT TIME ZONE 'Europe/Istanbul') - interval '5 hours')::date) - 6, (((now() AT TIME ZONE 'Europe/Istanbul') - interval '5 hours')::date), interval '1 day')::date AS gun
+       ),
+       taramalar AS (
+         SELECT (((timestamp AT TIME ZONE 'Europe/Istanbul') - interval '5 hours')::date) AS gun, count(DISTINCT rep_id)::int AS tekil
+           FROM scans WHERE masa IS NOT NULL AND lower(btrim(masa)) NOT IN ('', '--', 'bilinmiyor', 'undefined', 'null') AND (((timestamp AT TIME ZONE 'Europe/Istanbul') - interval '5 hours')::date) >= (((now() AT TIME ZONE 'Europe/Istanbul') - interval '5 hours')::date) - 6
+          GROUP BY 1
+       )
+       SELECT gunler.gun::text AS gun,
+              COALESCE(taramalar.tekil, 0) AS gelen_tekil_kisi,
+              COALESCE(pg.eslesen_kisi, 0) AS eslesen_kisi,
+              COALESCE(pg.eslesen_ciro, 0) AS eslesen_ciro,
+              COALESCE(pg.reklam_misafir, 0) AS reklam_misafir,
+              COALESCE(pg.reklam_ciro, 0) AS reklam_ciro,
+              (pg.is_gunu IS NOT NULL) AS adisyon_verisi_var
+         FROM gunler
+         LEFT JOIN taramalar ON taramalar.gun = gunler.gun
+         LEFT JOIN panel_gunluk pg ON pg.is_gunu = gunler.gun
+        ORDER BY gunler.gun DESC`);
+    res.json({ gunler: rows });
+  } catch (e) {
+    console.error('[s96] son7 ucu:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get("/api/admin/reports", async (req, res) => {
   try {
     const { start_date, end_date } = req.query;
@@ -832,6 +924,30 @@ app.post("/api/admin/upload-pos", upload.single('pos_file'), async (req, res) =>
       console.error('[panel] gunluk sayilar okunamadi:', e.message);
       reportData.panel = { hata: e.message };
     }
+      // ---- s96: bu IS GUNU icin ozeti kalici yaz (gun secici + son 7 gun okuyacak) ----
+      try {
+        const ilk = (reportData.matches || []).find(m => m.eventTime);
+        const dosyaGunu = ilk ? isGunu(ilk.eventTime * 1000)   // eventTime SANIYE -> ms
+                              : isGunu(Date.now());
+        await db.query(
+          `INSERT INTO panel_gunluk (is_gunu, eslesen_kisi, eslesen_ciro, reklam_misafir, reklam_ciro,
+                                     gecerli_adisyon, eslesen_adisyon, taramasiz_adisyon, eventler, guncellendi)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
+            ON CONFLICT (is_gunu) DO UPDATE SET
+              eslesen_kisi = EXCLUDED.eslesen_kisi, eslesen_ciro = EXCLUDED.eslesen_ciro,
+              reklam_misafir = EXCLUDED.reklam_misafir, reklam_ciro = EXCLUDED.reklam_ciro,
+              gecerli_adisyon = EXCLUDED.gecerli_adisyon, eslesen_adisyon = EXCLUDED.eslesen_adisyon,
+              taramasiz_adisyon = EXCLUDED.taramasiz_adisyon, eventler = EXCLUDED.eventler,
+              guncellendi = now()`,
+          [dosyaGunu, reportData.panel.eslesenKisi, reportData.panel.eslesenToplamCiro,
+           reportData.panel.reklamBaglantiliMisafir, reportData.panel.reklamBaglantiliCiro,
+           reportData.panel.gecerliAdisyon, reportData.panel.eslesenAdisyon,
+           reportData.panel.taramasizAdisyon, JSON.stringify(reportData.panel.metayaGidenEventler || {})]
+        );
+        reportData.panel.isGunu = dosyaGunu;
+      } catch (e) {
+        console.error('[s96] panel_gunluk yazilamadi:', e.message);
+      }
     res.json({ success: true, report: reportData });
   } catch (err) {
     console.error('Upload error:', err);
