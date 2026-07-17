@@ -749,7 +749,7 @@ app.get("/api/admin/panel", async (req, res) => {
         WHERE (((timestamp AT TIME ZONE 'Europe/Istanbul') - interval '5 hours')::date) = COALESCE($1::date, (((now() AT TIME ZONE 'Europe/Istanbul') - interval '5 hours')::date))
           AND masa IS NOT NULL AND lower(btrim(masa)) NOT IN ('', '--', 'bilinmiyor', 'undefined', 'null')`, [gun]);
     const { rows: kay } = await db.query(
-      `SELECT \${KAYNAK_SQL} AS kaynak, count(*)::int AS adet, count(DISTINCT rep_id)::int AS tekil
+      `SELECT ${KAYNAK_SQL} AS kaynak, count(*)::int AS adet, count(DISTINCT rep_id)::int AS tekil
          FROM scans
         WHERE (((timestamp AT TIME ZONE 'Europe/Istanbul') - interval '5 hours')::date) = COALESCE($1::date, (((now() AT TIME ZONE 'Europe/Istanbul') - interval '5 hours')::date))
         GROUP BY 1 ORDER BY 2 DESC`, [gun]);
