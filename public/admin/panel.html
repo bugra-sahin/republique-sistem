@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Günlük Panel — Republique</title>
+<link rel="stylesheet" href="/admin/css/admin.css">
+<style>
+  /* s96: MOBIL ONCELIKLI — Bugra paneli TELEFONDAN yonetiyor (390px hedef) */
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 12px; background: var(--bg-color, #0f1115); color: var(--text-primary, #e8eaed);
+         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .baslik { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+  .baslik h1 { font-size: 18px; margin: 0; font-weight: 700; }
+  .gun-secici { display: flex; align-items: center; gap: 6px; }
+  .gun-secici input[type=date] {
+    background: var(--card-bg, #1a1d24); color: var(--text-primary, #e8eaed);
+    border: 1px solid var(--border-color, #2a2f3a); border-radius: 10px;
+    padding: 8px 10px; font-size: 14px; min-height: 40px;
+  }
+  .ok { background: var(--card-bg,#1a1d24); border: 1px solid var(--border-color,#2a2f3a); color: var(--text-primary,#e8eaed);
+        border-radius: 10px; width: 40px; height: 40px; font-size: 18px; cursor: pointer; }
+  .ok:disabled { opacity: .35; }
+
+  .uyari { background: #3a2f12; border: 1px solid #6b5320; color: #f2d98c;
+           padding: 10px 12px; border-radius: 10px; font-size: 13px; line-height: 1.5; margin-bottom: 12px; }
+
+  /* Kartlar: 390px'te 2 sutun, sayilar BUYUK */
+  .kartlar { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .kart { background: var(--card-bg, #1a1d24); border: 1px solid var(--border-color, #2a2f3a);
+          border-radius: 14px; padding: 12px; min-height: 88px; display: flex; flex-direction: column; justify-content: center; }
+  .kart .etiket { font-size: 12px; color: var(--text-secondary, #9aa4b2); margin-bottom: 4px; line-height: 1.3; }
+  .kart .sayi { font-size: 30px; font-weight: 800; letter-spacing: -.5px; line-height: 1.05; }
+  .kart .alt { font-size: 11px; color: var(--text-secondary, #9aa4b2); margin-top: 4px; }
+  .kart.genis { grid-column: 1 / -1; }
+  .yesil { color: var(--accent-green, #4ade80); }
+  .mavi  { color: var(--accent-blue, #60a5fa); }
+  .mor   { color: var(--accent-purple, #a78bfa); }
+  .sari  { color: var(--accent-yellow, #fbbf24); }
+
+  h2.bolum { font-size: 14px; margin: 18px 0 8px; color: var(--text-secondary, #9aa4b2); font-weight: 600; }
+
+  /* admin.css tablolara min-width:560px dayatiyor -> 390px telefonda yatay kaydirma yapiyordu. IPTAL: */
+  table { width: 100%; min-width: 0; table-layout: fixed; border-collapse: collapse; font-size: 13px; }
+  td, th { overflow: hidden; text-overflow: ellipsis; }
+  th, td { text-align: left; padding: 9px 6px; border-bottom: 1px solid var(--border-color, #2a2f3a); }
+  th { color: var(--text-secondary, #9aa4b2); font-weight: 600; font-size: 12px; }
+  td.sag, th.sag { text-align: right; }
+  .cubuk { height: 6px; background: var(--accent-blue, #60a5fa); border-radius: 3px; min-width: 2px; }
+
+  .son7 td.gun { white-space: normal; }
+  .rozet { display: inline-block; font-size: 10px; padding: 2px 6px; border-radius: 6px;
+           background: #2a2f3a; color: #9aa4b2; margin-left: 4px; }
+  .yukleniyor { text-align: center; padding: 30px; color: var(--text-secondary, #9aa4b2); }
+  .hata { background: #3a1a1a; border: 1px solid #6b2020; color: #fca5a5; padding: 12px; border-radius: 10px; }
+
+  @media (min-width: 700px) { .kartlar { grid-template-columns: repeat(4, 1fr); } body { padding: 20px; } }
+</style>
+</head>
+<body>
+  <div class="baslik">
+    <h1>Günlük Panel</h1>
+    <div class="gun-secici">
+      <button class="ok" id="geri" title="Önceki gün">‹</button>
+      <input type="date" id="gun">
+      <button class="ok" id="ileri" title="Sonraki gün">›</button>
+    </div>
+  </div>
+
+  <div id="icerik" class="yukleniyor">Yükleniyor…</div>
+
+  <h2 class="bolum">Son 7 gün</h2>
+  <div id="son7" class="yukleniyor">Yükleniyor…</div>
+
+<script>
+// s96: Panel ekrani. Sayilar /api/admin/panel ve /api/admin/panel/son7'den gelir.
+// IS GUNU = takvim gunu DEGIL: 05:00 oncesi ONCEKI is gunune yazilir (dukkan 09:00-01:00).
+const $ = (s) => document.querySelector(s);
+const TL = (n) => (n || 0).toLocaleString('tr-TR') + ' TL';
+const AD = (n) => (n || 0).toLocaleString('tr-TR');
+
+function isGunuBugun() {
+  const d = new Date(Date.now() - 5 * 3600 * 1000);   // 05:00 esigi (tarayici TR saatinde)
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+function kart(etiket, sayi, renk, alt, genis) {
+  return '<div class="kart' + (genis ? ' genis' : '') + '">' +
+           '<div class="etiket">' + etiket + '</div>' +
+           '<div class="sayi ' + (renk || '') + '">' + sayi + '</div>' +
+           (alt ? '<div class="alt">' + alt + '</div>' : '') +
+         '</div>';
+}
+
+async function gunuYukle(gun) {
+  const el = $('#icerik');
+  el.className = 'yukleniyor';
+  el.textContent = 'Yükleniyor…';
+  try {
+    const r = await fetch('/api/admin/panel?gun=' + encodeURIComponent(gun), { credentials: 'include' });
+    if (!r.ok) throw new Error('Sunucu ' + r.status);
+    const d = await r.json();
+
+    let html = '';
+    if (!d.adisyonVerisiVar) {
+      html += '<div class="uyari"><b>Bu güne ait adisyon dosyası yüklenmemiş.</b><br>' +
+              'Gelen misafir sayısı ve kaynak dağılımı doğrudur; eşleşme ve ciro sayıları ' +
+              '“Adisyon Yükle”den gece dosyası yüklenince dolacak.</div>';
+    }
+
+    html += '<div class="kartlar">';
+    html += kart('Bugün gelen', AD(d.gelenTekilKisi), 'mavi', 'tekil kişi · ' + AD(d.gelenTarama) + ' okutma');
+    html += kart('Eşleşen', AD(d.eslesenKisi), 'yesil', 'adisyonla eşleşen kişi');
+    html += kart('Eşleşme oranı', '%' + AD(d.eslesmeOrani), 'yesil', 'gelenlerin ne kadarını yakaladık');
+    html += kart('Eşleşen ciro', TL(d.eslesenToplamCiro), 'yesil', 'eşleşen masaların toplamı');
+    html += kart('Reklamdan gelen', AD(d.reklamBaglantiliMisafir), 'mor', 'misafir (masadakiler dahil)');
+    html += kart('Reklamdan ciro', TL(d.reklamBaglantiliCiro), 'mor', 'o masaların toplamı');
+    html += kart('Yakalayamadığımız', '%' + AD(d.taramasizAdisyonYuzdesi), 'sari',
+                 AD(d.taramasizAdisyon) + ' / ' + AD(d.gecerliAdisyon) + ' adisyonda QR okutan yok');
+    const ev = d.metayaGidenEventler || {};
+    html += kart('Meta’ya giden', AD((ev.purchase || 0) + (ev.reklamMisafiri || 0) + (ev.tumSatislar || 0)), '',
+                 'Satış ' + AD(ev.purchase) + ' · Reklam ' + AD(ev.reklamMisafiri) + ' · Tüm ' + AD(ev.tumSatislar));
+    html += '</div>';
+
+    html += '<h2 class="bolum">Misafirler nereden geldi</h2>';
+    const kd = d.kaynakDagilimi || [];
+    if (!kd.length) {
+      html += '<div class="uyari">Bu gün hiç okutma yok.</div>';
+    } else {
+      const enBuyuk = Math.max.apply(null, kd.map(k => k.adet));
+      html += '<table><tr><th>Kaynak</th><th class="sag">Kişi</th><th class="sag">Okutma</th></tr>';
+      kd.forEach(k => {
+        const g = Math.round((k.adet / enBuyuk) * 100);
+        html += '<tr><td>' + k.kaynak + '<div class="cubuk" style="width:' + g + '%"></div></td>' +
+                '<td class="sag">' + AD(k.tekil) + '</td><td class="sag">' + AD(k.adet) + '</td></tr>';
+      });
+      html += '</table>';
+    }
+
+    el.className = '';
+    el.innerHTML = html;
+  } catch (e) {
+    el.className = '';
+    el.innerHTML = '<div class="hata">Panel yüklenemedi: ' + e.message + '</div>';
+  }
+}
+
+async function son7Yukle() {
+  const el = $('#son7');
+  try {
+    const r = await fetch('/api/admin/panel/son7', { credentials: 'include' });
+    if (!r.ok) throw new Error('Sunucu ' + r.status);
+    const d = await r.json();
+    let html = '<table class="son7"><tr><th>Gün</th><th class="sag">Gelen</th><th class="sag">Eşleşen</th><th class="sag">Reklam ciro</th></tr>';
+    (d.gunler || []).forEach(g => {
+      const t = new Date(g.gun + 'T12:00:00');
+      const etiket = t.toLocaleDateString('tr-TR', { day: '2-digit', month: 'short' });
+      const gun_adi = t.toLocaleDateString('tr-TR', { weekday: 'short' });
+      html += '<tr><td class="gun">' + etiket + ' <span class="rozet">' + gun_adi + '</span>' +
+              (!g.adisyon_verisi_var ? '<span class="rozet">dosya yok</span>' : '') + '</td>' +
+              '<td class="sag">' + AD(g.gelen_tekil_kisi) + '</td>' +
+              '<td class="sag">' + AD(g.eslesen_kisi) + '</td>' +
+              '<td class="sag">' + TL(g.reklam_ciro) + '</td></tr>';
+    });
+    html += '</table>';
+    el.className = '';
+    el.innerHTML = html;
+  } catch (e) {
+    el.className = '';
+    el.innerHTML = '<div class="hata">Son 7 gün yüklenemedi: ' + e.message + '</div>';
+  }
+}
+
+function gunKaydir(adet) {
+  const d = new Date($('#gun').value + 'T12:00:00');
+  d.setDate(d.getDate() + adet);
+  const y = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  $('#gun').value = y;
+  $('#ileri').disabled = (y >= isGunuBugun());
+  gunuYukle(y);
+}
+
+$('#gun').value = isGunuBugun();
+$('#ileri').disabled = true;
+$('#geri').addEventListener('click', () => gunKaydir(-1));
+$('#ileri').addEventListener('click', () => gunKaydir(1));
+$('#gun').addEventListener('change', () => {
+  $('#ileri').disabled = ($('#gun').value >= isGunuBugun());
+  gunuYukle($('#gun').value);
+});
+
+gunuYukle($('#gun').value);
+son7Yukle();
+</script>
+</body>
+</html>
