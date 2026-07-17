@@ -100,7 +100,7 @@ async function sendCapiEvent(match) {
     custom_data: {
       value: match.perCapita,
       currency: 'TRY',
-      content_name: 'Adisyon Eslesmesi - ' + match.label,
+      content_name: 'Adisyon Eşleşmesi - ' + match.label,   // §91: ORIJINAL metin (Purchase davranisi DEGISMEZ)
       content_category: match.type
     }
   };
