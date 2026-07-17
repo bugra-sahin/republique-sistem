@@ -25,6 +25,17 @@ function masaUrl(masa) {
 //   ic-ag IP (172./10./127./192.168.) = 0 -> Caddy X-Forwarded-For'u DOGRU iletiyor.
 // >>> DIKKAT (Bugra'nin notu): misafirler dukkan WiFi'indaysa IP'ler AYNI cikar. BU NORMALDIR.
 //     IP UYDURMA / CESITLENDIRME YAPILMAZ. Meta 'ayni IP' uyarisi verirse Tanilar'dan okunur.
+// ============ §90: MASASIZ MI? ============
+// 🔴 test2'de OLCULDU: masasiz /menu ziyaretinde app.js masa alanina 'Bilinmiyor' YAZIYOR.
+// Yani `if (!masa)` kontrolu YETMEZ - 'Bilinmiyor' truthy'dir ve kontrolden GECER.
+// KANIT: 3 tarama (2 masali + 1 masasiz) -> 3 RestoranZiyaret gitti; DB: 'Bilinmiyor','b-9','b-9'.
+// Bugra'nin kurali: "masasiz /menu ziyaretinde ASLA gonderme."
+const MASASIZ_DEGERLER = ['', '--', 'bilinmiyor', 'undefined', 'null'];
+function masasizMi(masa) {
+  if (masa === null || masa === undefined) return true;
+  return MASASIZ_DEGERLER.includes(String(masa).trim().toLowerCase());
+}
+
 function kimlikBlogu(k) {
   const ud = {};
   if (k.fbp) ud.fbp = k.fbp;
@@ -108,7 +119,8 @@ async function sendCapiEvent(match) {
 //   ve eski URL-kuralli 'Restorana gelme' ozel donusumunun yerini alir -> o da website idi.
 //   >>> Test Events'te 'INTERNET SITESI' kanalinda gorunur (Purchase 'Cevrimdisi'nda). BEKLENEN.
 async function ziyaretEventiGonder(scan) {
-  if (!scan || !scan.masa || String(scan.masa).trim() === '') return false;  // masasiz -> ASLA
+  // masasiz -> ASLA gonderme (Bugra'nin kurali). 'Bilinmiyor' DA masasiz sayilir (yukari bak).
+  if (!scan || masasizMi(scan.masa)) return false;
   const eventTime = scan.timestamp ? Math.floor(new Date(scan.timestamp).getTime() / 1000)
                                    : Math.floor(Date.now() / 1000);
   const event = {
