@@ -291,12 +291,20 @@ async function processPosUpload(buffer) {
     for (const scan of allScans) {
       const masa = (scan.masa || '').trim();
       // §90-C: 'Bilinmiyor' DA masasiz sayilir (eskiden bu satir GECIRIYORDU -> yanlis Purchase).
-      if (masasizMi(masa)) { tani.masasizElendi = (tani.masasizElendi || 0) + 1; continue; }
+      // §91: masasiz kontrolu ASAGI TASINDI (diger tum kontrollerden SONRA) ki sayac
+      //       'IMPUTE ALACAKTI ama masasiz diye elendi' anlamina gelsin = KANIT DEGERI olsun.
       if (matchedRepIds.has(scan.rep_id)) continue; // zaten gercek degerle eslesti
       const hist = userHistory[scan.rep_id];
       if (!hist || !hist.hasSeenAd) continue;    // reklam gecmisi yoksa organik -> haric
       const t = new Date(scan.timestamp).getTime();
       if (t < lo || t > hi) continue;            // yuklenen gunun disindaysa atla
+      // ============ §90-C / §91: MASASIZ ELEME (Bugra onayi) ============
+      // BURAYA KADAR GELEN KAYIT **IMPUTE ALMAYA HAK KAZANMISTIR**: eslesmemis + reklam gecmisi VAR
+      // + dosyanin gunu icinde. Tek engel: dukkana GELMEMIS olmasi (masasiz /menu ziyareti).
+      // ESKIDEN: `if (!masa) continue;` -> app.js 'Bilinmiyor' yazdigi icin GECIYORDU ->
+      //   menuye bakip GELMEYEN kisi ortalama degerle **Purchase olarak Meta'ya gidiyordu.**
+      // Bu sayac artik TAM OLARAK sunu olcer: "IMPUTE alacakti ama gelmedigi icin elendi".
+      if (masasizMi(masa)) { tani.masasizElendi = (tani.masasizElendi || 0) + 1; continue; }
       if (!imputedVisits[scan.rep_id]) imputedVisits[scan.rep_id] = scan;
     }
     for (const rep_id in imputedVisits) {
