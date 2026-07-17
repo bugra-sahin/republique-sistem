@@ -12,6 +12,20 @@ const db = require('./db');
 // NOT: Onceki "%100 eslesme" testi YANILTICIYDI - o taramalari sunucudaki Playwright uretmisti,
 //   yani adisyon saatleriyle AYNI (UTC) cerceveden geliyordu. Gercek misafirde durum farkli.
 // Turkiye 2016'dan beri KALICI +03 (yaz saati uygulamasi YOK) -> sabit ofset guvenli.
+// ============ §90-C: MASASIZ MI? (Bugra onayiyla eklendi) ============
+// 🔴 OLCULDU: app.js masasiz /menu ziyaretinde masa alanina 'Bilinmiyor' YAZIYOR.
+// Bu yuzden asagidaki IMPUTE korumasi `if (!masa) continue;` CALISMIYORDU:
+//   'Bilinmiyor' truthy -> dukkana GELMEMIS (sadece menuye bakmis) biri
+//   IMPUTE_ORTALAMA alip **Purchase olarak Meta'ya gidiyordu** = ciroya yanlis kisi.
+// Kodun kendi yorumu zaten "masasiz /menu = gelmemis -> haric" diyordu; NIYET buydu,
+// UYGULAMA bozuktu. Bu duzeltme niyeti CALISIR hale getirir.
+// NOT: ayni liste capi-sender.js icinde de var (RestoranZiyaret icin).
+const MASASIZ_DEGERLER = ['', '--', 'bilinmiyor', 'undefined', 'null'];
+function masasizMi(masa) {
+  if (masa === null || masa === undefined) return true;
+  return MASASIZ_DEGERLER.includes(String(masa).trim().toLowerCase());
+}
+
 // ============ §86: fbclid -> fbc YEDEK DONUSUMU (SUNUCU TARAFI) ============
 // Asil duzeltme app.js'te (tarayicida, tiklama aninda). BU yedek iki isi yapar:
 //   1) VERITABANINDAKI ESKI KAYITLARI KURTARIR (fbclid saklanmis ama fbc bos olan 5 kayit),
@@ -276,7 +290,8 @@ async function processPosUpload(buffer) {
     const imputedVisits = {}; // rep_id -> ilk uygun ad-masa taramasi (kisi basi tek Purchase)
     for (const scan of allScans) {
       const masa = (scan.masa || '').trim();
-      if (!masa) continue;                       // masasiz /menu = gelmemis -> haric
+      // §90-C: 'Bilinmiyor' DA masasiz sayilir (eskiden bu satir GECIRIYORDU -> yanlis Purchase).
+      if (masasizMi(masa)) { tani.masasizElendi = (tani.masasizElendi || 0) + 1; continue; }
       if (matchedRepIds.has(scan.rep_id)) continue; // zaten gercek degerle eslesti
       const hist = userHistory[scan.rep_id];
       if (!hist || !hist.hasSeenAd) continue;    // reklam gecmisi yoksa organik -> haric
