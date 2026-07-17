@@ -12,6 +12,20 @@ const db = require('./db');
 // NOT: Onceki "%100 eslesme" testi YANILTICIYDI - o taramalari sunucudaki Playwright uretmisti,
 //   yani adisyon saatleriyle AYNI (UTC) cerceveden geliyordu. Gercek misafirde durum farkli.
 // Turkiye 2016'dan beri KALICI +03 (yaz saati uygulamasi YOK) -> sabit ofset guvenli.
+// ============ §90-C: MASASIZ MI? (Bugra onayiyla eklendi) ============
+// 🔴 OLCULDU: app.js masasiz /menu ziyaretinde masa alanina 'Bilinmiyor' YAZIYOR.
+// Bu yuzden asagidaki IMPUTE korumasi `if (!masa) continue;` CALISMIYORDU:
+//   'Bilinmiyor' truthy -> dukkana GELMEMIS (sadece menuye bakmis) biri
+//   IMPUTE_ORTALAMA alip **Purchase olarak Meta'ya gidiyordu** = ciroya yanlis kisi.
+// Kodun kendi yorumu zaten "masasiz /menu = gelmemis -> haric" diyordu; NIYET buydu,
+// UYGULAMA bozuktu. Bu duzeltme niyeti CALISIR hale getirir.
+// NOT: ayni liste capi-sender.js icinde de var (RestoranZiyaret icin).
+const MASASIZ_DEGERLER = ['', '--', 'bilinmiyor', 'undefined', 'null'];
+function masasizMi(masa) {
+  if (masa === null || masa === undefined) return true;
+  return MASASIZ_DEGERLER.includes(String(masa).trim().toLowerCase());
+}
+
 // ============ §86: fbclid -> fbc YEDEK DONUSUMU (SUNUCU TARAFI) ============
 // Asil duzeltme app.js'te (tarayicida, tiklama aninda). BU yedek iki isi yapar:
 //   1) VERITABANINDAKI ESKI KAYITLARI KURTARIR (fbclid saklanmis ama fbc bos olan 5 kayit),
@@ -101,6 +115,10 @@ async function processPosUpload(buffer) {
     if (!openTime) continue;
 
     const pax = parseInt(row['__EMPTY_10']) || 1;
+    // §90: Adisyon ID = A sutunu. sheet_to_json 1.satiri ('Adisyon Listesi') BASLIK sayar ->
+    // A sutununun anahtari 'Adisyon Listesi' olur. GERCEK PionPOS dosyasiyla DOGRULANDI
+    // (A='Adisyon ID', deger orn. 'lxl19K4Oa1HtZImQ...'). Bos gelirse masa+acilis ile yedekle.
+    const adisyonId = String(row['Adisyon Listesi'] || (String(masaName) + '@' + row['__EMPTY_6'])).trim();
     const totalStr = row['__EMPTY_12'] || '0';
     const totalRaw = totalStr.replace(/[^0-9,]/g, '').replace(',', '.');
     const total = parseFloat(totalRaw) || 0;
@@ -164,7 +182,8 @@ async function processPosUpload(buffer) {
       if (!seenIds.has(s.rep_id)) {
         seenIds.add(s.rep_id);
         const isAd = !!(s.fbclid || ['meta','facebook','ig','instagram'].includes(s.utm_source));
-        uniqueUsersAtTable.push({ rep_id: s.rep_id, isAdThisScan: isAd, timestamp: new Date(s.timestamp).getTime(), fbp: s.fbp, fbc: fbcUret(s) });
+        // §90: scanId (event_id icin) + GERCEK misafir ip/user_agent (CAPI user_data icin) tasinir.
+        uniqueUsersAtTable.push({ rep_id: s.rep_id, isAdThisScan: isAd, timestamp: new Date(s.timestamp).getTime(), fbp: s.fbp, fbc: fbcUret(s), scanId: s.id, ip: s.ip, user_agent: s.user_agent });
       }
     }
 
@@ -232,6 +251,11 @@ async function processPosUpload(buffer) {
       results.matches.push({
         rep_id: u.rep_id,
         masa: masaName,
+        adisyonId: adisyonId,   // §90
+        scanId: u.scanId,       // §90
+        pax: pax,               // §90 (ReklamMisafiri kac adet gidecek)
+        ip: u.ip,               // §90
+        user_agent: u.user_agent, // §90
         time: row['__EMPTY_6'],
         total: total,
         perCapita: perCapita,
@@ -266,12 +290,21 @@ async function processPosUpload(buffer) {
     const imputedVisits = {}; // rep_id -> ilk uygun ad-masa taramasi (kisi basi tek Purchase)
     for (const scan of allScans) {
       const masa = (scan.masa || '').trim();
-      if (!masa) continue;                       // masasiz /menu = gelmemis -> haric
+      // §90-C: 'Bilinmiyor' DA masasiz sayilir (eskiden bu satir GECIRIYORDU -> yanlis Purchase).
+      // §91: masasiz kontrolu ASAGI TASINDI (diger tum kontrollerden SONRA) ki sayac
+      //       'IMPUTE ALACAKTI ama masasiz diye elendi' anlamina gelsin = KANIT DEGERI olsun.
       if (matchedRepIds.has(scan.rep_id)) continue; // zaten gercek degerle eslesti
       const hist = userHistory[scan.rep_id];
       if (!hist || !hist.hasSeenAd) continue;    // reklam gecmisi yoksa organik -> haric
       const t = new Date(scan.timestamp).getTime();
       if (t < lo || t > hi) continue;            // yuklenen gunun disindaysa atla
+      // ============ §90-C / §91: MASASIZ ELEME (Bugra onayi) ============
+      // BURAYA KADAR GELEN KAYIT **IMPUTE ALMAYA HAK KAZANMISTIR**: eslesmemis + reklam gecmisi VAR
+      // + dosyanin gunu icinde. Tek engel: dukkana GELMEMIS olmasi (masasiz /menu ziyareti).
+      // ESKIDEN: `if (!masa) continue;` -> app.js 'Bilinmiyor' yazdigi icin GECIYORDU ->
+      //   menuye bakip GELMEYEN kisi ortalama degerle **Purchase olarak Meta'ya gidiyordu.**
+      // Bu sayac artik TAM OLARAK sunu olcer: "IMPUTE alacakti ama gelmedigi icin elendi".
+      if (masasizMi(masa)) { tani.masasizElendi = (tani.masasizElendi || 0) + 1; continue; }
       if (!imputedVisits[scan.rep_id]) imputedVisits[scan.rep_id] = scan;
     }
     for (const rep_id in imputedVisits) {
@@ -282,6 +315,9 @@ async function processPosUpload(buffer) {
       results.matches.push({
         rep_id: rep_id,
         masa: scan.masa,
+        scanId: scan.id,          // §90
+        ip: scan.ip,              // §90
+        user_agent: scan.user_agent, // §90
         time: new Date(scan.timestamp).toISOString(),
         total: avgPerCapita,
         perCapita: avgPerCapita,
