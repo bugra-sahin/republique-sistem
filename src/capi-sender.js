@@ -158,7 +158,8 @@ function reklamMisafiriEventleri(adisyonlar) {
         event_id: a.adisyonId + '-' + i,          // Bugra: adisyonID + sira
         action_source: 'physical_store',
         event_source_url: masaUrl(a.masa),
-        user_data: kimlikBlogu(kimlik)
+        user_data: kimlikBlogu(kimlik),
+        custom_data: { content_name: 'Reklam Misafiri' },   // s94: ozel donusum kurali icin etiket
         // DEGERSIZ (Bugra'nin karari)
       });
     }
