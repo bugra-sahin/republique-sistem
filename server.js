@@ -816,19 +816,6 @@ app.get("/api/admin/panel/son7", async (req, res) => {
   }
 });
 
-// ============ s98: TEK TARAMA TESHISI (fbclid/fbc olcumu, gecici arac) ============
-app.get("/api/admin/teshis-tarama", async (req, res) => {
-  try {
-    const ara = (req.query.ara || "").toString().slice(0, 60);
-    const { rows } = await db.query(
-      `SELECT id, timestamp, fbclid, fbc, user_agent, ip, rep_id, kaynak_tur, tekrar_gelen, referrer
-         FROM scans
-        WHERE fbclid ILIKE '%' || $1 || '%' OR fbc ILIKE '%' || $1 || '%'
-        ORDER BY id DESC LIMIT 5`, [ara]);
-    res.json({ bulunan: rows.length, kayitlar: rows });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
 app.get("/api/admin/reports", async (req, res) => {
   try {
     const { start_date, end_date } = req.query;
